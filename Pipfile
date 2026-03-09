@@ -12,6 +12,7 @@ openpyxl = "*"
 pillow = "*"
 ipython = "*"
 bs4 = "*"
+matplotlib = "*"
 
 [dev-packages]
 
