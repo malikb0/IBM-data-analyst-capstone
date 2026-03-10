@@ -13,6 +13,7 @@ pillow = "*"
 ipython = "*"
 bs4 = "*"
 matplotlib = "*"
+seaborn = "*"
 
 [dev-packages]
 
