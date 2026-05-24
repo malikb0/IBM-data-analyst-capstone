@@ -1,0 +1,11 @@
+flask
+requests
+ipykernel
+pandas
+openpyxl
+pillow
+ipython
+bs4
+matplotlib
+seaborn
+scikit-learn

@@ -3,3 +3,4 @@ survey_data.csv
 12_modified_survey_data.csv
 survey-data.csv
 *.csv
+*.sqlite
