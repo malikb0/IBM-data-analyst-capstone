@@ -1,0 +1,1 @@
+help me complete the task in this lab. Step by step work on one task at a time then ask permission to move to next task. Inspect, plan and provide me code for copy paste in notebook. Do not try to edit notebook directly. Python virtual environment already created in the same folder named ".venv-data-analysis". Use this virtual environment for your testing code when needed.
