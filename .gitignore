@@ -4,3 +4,5 @@ survey_data.csv
 survey-data.csv
 *.csv
 *.sqlite
+*.json
+*.db
