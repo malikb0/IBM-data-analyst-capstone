@@ -6,3 +6,7 @@ survey-data.csv
 *.sqlite
 *.json
 *.db
+*.xls
+*.xlsx
+*.png
+*.pptx
