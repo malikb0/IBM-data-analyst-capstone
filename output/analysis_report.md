@@ -1,8 +1,21 @@
 # Survey Data Analysis Report
 
+> **Generated artifact — do not edit by hand.** This report and the charts in this
+> directory are produced by `generate_report.py` from the SQLite database
+> `survey_cleaned.sqlite`.
+>
+> - **Dataset:** Stack Overflow Developer Survey 2024 (ODbL). See `NOTICE.md`.
+> - **Pipeline:** `build_database.py` → `generate_report.py` (see `METHODOLOGY.md`).
+> - **Regenerate:** `make demo` (offline sample) or
+>   `make fetch-data && make build-db && make report` (full run).
+>
+> Figures labelled *Data Context* and the summary tables below are computed at run
+> time, as are the percentages quoted in the narrative. The charts are the
+> authoritative source; prose is descriptive, not causal.
+
 ## Executive Summary
 
-This report presents a comprehensive analysis of the Stack Overflow 2024 Developer Survey dataset, covering 18,845 respondents from 180+ countries. The analysis explores technology trends, job satisfaction patterns, compensation distributions, geographic and demographic technology preferences, and the interplay between work arrangements, compensation, and satisfaction. Key findings include the continued dominance of JavaScript and the rapid rise of TypeScript, PostgreSQL's leadership in databases, the positive correlation between remote work and both satisfaction and compensation, and the emergence of AI tools as a significant factor in the developer ecosystem.
+This report analyses the Stack Overflow 2024 Developer Survey, covering 18,845 respondents from 161 countries and territories. The pipeline cleans and normalises the survey into a relational SQLite model (40 tables), then derives the charts and findings below. The analysis covers technology trends, job satisfaction, compensation, geography, age, and AI tooling. Headline patterns: JavaScript remains the most widely used language, TypeScript and Rust show the strongest forward-looking demand, PostgreSQL leads databases, remote work correlates with higher satisfaction and pay, and AI tools are already part of many developers' workflows. All findings are descriptive and correlational (see the Discussion and `LIMITATIONS.md`).
 
 ## 1. Data Overview & Database Schema
 
@@ -12,22 +25,22 @@ This report presents a comprehensive analysis of the Stack Overflow 2024 Develop
 |--------|-------|
 | **Total Respondents** | 18,845 |
 | **Columns (CSV)** | 114 |
-| **Normalized Tables (SQLite)** | 39 |
-| **Database Size** | ~186 MB |
-| **Countries Represented** | 180+ |
+| **Normalized Tables (SQLite)** | 40 |
+| **Database Size** | 115 MB |
+| **Countries Represented** | 161 |
 
 ### Data Cleaning Applied
 
 | Column | Issue | Cleaning |
 |--------|-------|----------|
 | `YearsCode` / `YearsCodePro` | Text values: 'Less than 1 year', 'More than 50 years' | Mapped to 0.5 and 55 respectively |
-| `ConvertedCompYearly` | Extreme outliers (up to $6.3M) | Capped at 99th percentile (~$635K) |
-| `Age` | 'Prefer not to say' (24 responses) | Mapped to NULL |
-| `Employment` | Semicolon-delimited multi-values | Normalized into `respondent_employment` table |
-| `DevType` | Semicolon-delimited multi-values | Normalized into `respondent_devtype` table |
-| `LearnCode`, `CodingActivities` | Semicolon-delimited multi-values | Normalized into separate tables |
-| All 33 `*HaveWorkedWith`, `*WantToWorkWith`, `*Admired` columns | 11 categories × 3 variants, semicolon-delimited | Normalized into 33 per-category tables |
-| `Knowledge_1` through `Knowledge_9` | Likert text responses | Mapped to numeric scores (1=Strongly disagree..5=Strongly agree) |
+| `ConvertedCompYearly` | Extreme outliers | Capped at the 99th percentile ($378,512); values above are clipped |
+| `Age` | 'Prefer not to say' and unmapped values | Mapped to NULL |
+| `Employment` | Semicolon-delimited multi-values | Normalized into `respondent_employment` (de-duplicated per respondent) |
+| `DevType` | Semicolon-delimited multi-values | Normalized into `respondent_devtype` (de-duplicated per respondent) |
+| `LearnCode`, `CodingActivities` | Semicolon-delimited multi-values | Normalized into separate tables (de-duplicated per respondent) |
+| All 33 `*HaveWorkedWith`, `*WantToWorkWith`, `*Admired` columns | 11 categories × 3 variants, semicolon-delimited | Normalized into 33 per-category tables (de-duplicated per respondent × value) |
+| `Knowledge_1` through `Knowledge_9` | Likert text responses | Mapped to numeric scores (1=Strongly disagree..5=Strongly agree); unmapped → NULL + warning |
 | `JobSatPoints_*` | Scattered 0-100 scores | Normalized into `job_satisfaction_points` table with aspect labels |
 
 ### Key Null Statistics
@@ -44,24 +57,45 @@ This report presents a comprehensive analysis of the Stack Overflow 2024 Develop
 
 ```mermaid
 erDiagram
-    respondents ||--o{ language_have : has
-    respondents ||--o{ language_want : wants
-    respondents ||--o{ language_admired : admires
-    respondents ||--o{ database_have : has
-    respondents ||--o{ database_want : wants
-    respondents ||--o{ database_admired : admires
-    respondents ||--o{ platform_have : has
-    respondents ||--o{ platform_want : wants
-    respondents ||--o{ platform_admired : admires
-    respondents ||--o{ webframe_have : has
-    respondents ||--o{ webframe_want : wants
-    respondents ||--o{ webframe_admired : admires
-    respondents ||--o{ toolstech_have : has
-    respondents ||--o{ respondent_devtype : categorized_as
-    respondents ||--o{ respondent_learn_code : learned_from
-    respondents ||--o{ respondent_coding_activities : codes_for
-    respondents ||--o{ job_satisfaction_points : rates
-    respondents ||--o{ knowledge_self_assessment : self_assesses
+    respondents ||--o{ Language_have : references
+    respondents ||--o{ Language_want : references
+    respondents ||--o{ Language_admired : references
+    respondents ||--o{ Database_have : references
+    respondents ||--o{ Database_want : references
+    respondents ||--o{ Database_admired : references
+    respondents ||--o{ Platform_have : references
+    respondents ||--o{ Platform_want : references
+    respondents ||--o{ Platform_admired : references
+    respondents ||--o{ Webframe_have : references
+    respondents ||--o{ Webframe_want : references
+    respondents ||--o{ Webframe_admired : references
+    respondents ||--o{ Embedded_have : references
+    respondents ||--o{ Embedded_want : references
+    respondents ||--o{ Embedded_admired : references
+    respondents ||--o{ MiscTech_have : references
+    respondents ||--o{ MiscTech_want : references
+    respondents ||--o{ MiscTech_admired : references
+    respondents ||--o{ ToolsTech_have : references
+    respondents ||--o{ ToolsTech_want : references
+    respondents ||--o{ ToolsTech_admired : references
+    respondents ||--o{ NEWCollabTools_have : references
+    respondents ||--o{ NEWCollabTools_want : references
+    respondents ||--o{ NEWCollabTools_admired : references
+    respondents ||--o{ OfficeStackAsync_have : references
+    respondents ||--o{ OfficeStackAsync_want : references
+    respondents ||--o{ OfficeStackAsync_admired : references
+    respondents ||--o{ OfficeStackSync_have : references
+    respondents ||--o{ OfficeStackSync_want : references
+    respondents ||--o{ OfficeStackSync_admired : references
+    respondents ||--o{ AISearchDev_have : references
+    respondents ||--o{ AISearchDev_want : references
+    respondents ||--o{ AISearchDev_admired : references
+    respondents ||--o{ respondent_employment : references
+    respondents ||--o{ respondent_devtype : references
+    respondents ||--o{ respondent_learn_code : references
+    respondents ||--o{ respondent_coding_activities : references
+    respondents ||--o{ job_satisfaction_points : references
+    respondents ||--o{ knowledge_self_assessment : references
 
     respondents {
         int respondent_id PK
@@ -102,7 +136,7 @@ erDiagram
 
 Note: The diagram shows representative tables for brevity. The full schema includes 33 per-category technology tables (11 categories × 3 variants: have/want/admired) and 6 junction tables for employment types, developer roles, learning sources, coding activities, satisfaction points, and knowledge assessments. All per-category tech tables share the same structure as `language_have`.
 
-### Database Schema (39 Tables)
+### Database Schema (40 Tables)
 
 ### `respondents` (18,845 rows)
 | Column | Type | Nullable |
@@ -138,147 +172,147 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 | survey_length | TEXT | YES |
 | survey_ease | TEXT | YES |
 
-### `language_have` (116,557 rows)
+### `Language_have` (116,557 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `language_want` (106,356 rows)
+### `Language_want` (106,356 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `language_admired` (83,523 rows)
+### `Language_admired` (83,523 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `database_have` (69,586 rows)
+### `Database_have` (69,586 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `database_want` (65,913 rows)
+### `Database_want` (65,913 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `database_admired` (49,898 rows)
+### `Database_admired` (49,898 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `platform_have` (50,655 rows)
+### `Platform_have` (50,655 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `platform_want` (48,410 rows)
+### `Platform_want` (48,410 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `platform_admired` (36,883 rows)
+### `Platform_admired` (36,883 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `webframe_have` (77,803 rows)
+### `Webframe_have` (77,803 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `webframe_want` (71,417 rows)
+### `Webframe_want` (71,417 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `webframe_admired` (52,759 rows)
+### `Webframe_admired` (52,759 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `embedded_have` (15,629 rows)
+### `Embedded_have` (15,629 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `embedded_want` (13,538 rows)
+### `Embedded_want` (13,538 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `embedded_admired` (11,486 rows)
+### `Embedded_admired` (11,486 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `misctech_have` (45,338 rows)
+### `MiscTech_have` (45,338 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `misctech_want` (47,158 rows)
+### `MiscTech_want` (47,158 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `misctech_admired` (30,862 rows)
+### `MiscTech_admired` (30,862 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `toolstech_have` (99,274 rows)
+### `ToolsTech_have` (99,274 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `toolstech_want` (87,561 rows)
+### `ToolsTech_want` (87,561 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
 | respondent_id | INTEGER | NO |
 | tech_name | TEXT | NO |
 
-### `toolstech_admired` (73,925 rows)
+### `ToolsTech_admired` (73,925 rows)
 | Column | Type | Nullable |
 |--------|------|----------|
 | id | INTEGER | YES |
@@ -424,7 +458,7 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 **Data Context:** Based on 116,557 responses from 18,845 total respondents. Each respondent could select multiple languages. Chart shows the top 10 languages by raw count of respondents who reported using them. No outlier removal applied — all valid responses included.
 
-**This chart shows the top 10 programming languages respondents currently use.** JavaScript leads with nearly 15,000 respondents, followed by SQL and HTML/CSS — reflecting the web-centric nature of the developer population.
+**This chart shows the top 10 programming languages respondents currently use.** JavaScript leads with 14,943 respondents, followed by SQL and HTML/CSS — reflecting the web-centric nature of the developer population.
 
 **Key Findings:**
 - **JavaScript** dominates with ~79% adoption — it is the baseline requirement for modern web development.
@@ -448,15 +482,15 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 **This chart shows the top 10 languages respondents want to work with — a forward-looking indicator of where developers are investing their learning time.**
 
 **Key Findings:**
-- **TypeScript** tops the wanted list (~27%), surpassing even JavaScript (~27% as well). Its want-to-have ratio is the strongest among major languages.
-- **Python** ranks second (~24%), showing sustained interest beyond current users.
-- **Rust** enters the top 10 wanted list (~7%) despite not being in the top 10 current — a clear growth signal.
-- **Go** (~9%) and **Kotlin** (~8%) show strong desire, reflecting cloud-native and Android ecosystem trends.
-- **JavaScript** and **HTML/CSS** have lower want percentages relative to current usage — they are considered 'solved' skills.
+- **JavaScript** is the most-wanted language (~61%), followed by SQL and TypeScript. Raw desire is dominated by the established leaders that most respondents already use.
+- **TypeScript** (~55% want vs ~57% current use) is close to parity with its current adoption, reflecting its continued growth.
+- **Rust** has the strongest want/have ratio among major languages (~2.45x: 2,284 use it, 5,597 want to), a clear growth signal.
+- **Go** (~30%) and **Kotlin** (~0%) show solid desire, reflecting cloud-native and Android ecosystem trends.
+- **JavaScript** and **HTML/CSS** have lower want/have ratios (<1) relative to current usage — they are mature, 'solved' skills for many respondents.
 
 **Implications:**
-- **TypeScript is the single best language for career development** — high current usage AND highest desire signal a long growth runway.
-- **Rust and Go represent the biggest 'gap' opportunities** — few developers know them but many want to learn.
+- **TypeScript combines high current usage (57%) with strong, sustained desire (55%)** — a stable skill investment.
+- **Rust and Go represent the biggest 'gap' opportunities** — fewer developers know them but many want to learn.
 - **Python demand is sustained by AI/ML growth**, not just current data science roles.
 
 ### 2.2 Databases
@@ -467,15 +501,14 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 **Data Context:** Based on 69,586 responses from 18,845 total respondents. Chart shows the top 10 databases by raw adoption count. No data cleaning applied beyond the standard ConvertedCompYearly cap at the 99th percentile.
 
-**This chart shows the top 10 databases respondents currently use.** PostgreSQL leads with the highest adoption, followed by SQLite and MySQL.
+**This chart shows the top 10 databases respondents currently use.** PostgreSQL leads with the highest adoption, followed by MySQL, SQLite, and MongoDB.
 
 **Key Findings:**
 - **PostgreSQL** is the most used database, reflecting its open-source nature, strong feature set, and enterprise adoption.
-- **SQLite** ranks second, driven by its ubiquity in mobile, embedded, and local development environments.
-- **MySQL** ranks third but has been losing ground to PostgreSQL in recent years.
+- **MySQL** ranks second and **SQLite** third, driven respectively by legacy web stacks and by ubiquity in mobile, embedded, and local development.
 - **MongoDB** leads the NoSQL category, confirming its place as the default document database.
 - **Redis** and **Elasticsearch** show strong usage in caching and search use cases respectively.
-- **SQL Server** remains relevant in enterprise .NET environments.
+- **Microsoft SQL Server** remains relevant in enterprise .NET environments.
 
 **Implications:**
 - **PostgreSQL expertise is the most valuable database skill** for broad employability.
@@ -490,17 +523,16 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 **This chart shows the top 10 databases respondents want to work with — revealing where database interest is migrating.**
 
 **Key Findings:**
-- **PostgreSQL** also tops the wanted list, confirming its dominance and continued growth trajectory.
-- **MongoDB** ranks second in desire, showing sustained NoSQL interest beyond current adoption.
-- **DuckDB** enters the top 10 despite low current usage — it represents the fastest-growing analytical database interest.
-- **ClickHouse** also shows up as a rising column-oriented database for analytics workloads.
-- **MySQL** drops significantly in the want ranking compared to current usage — developers are actively moving away.
-- **Cloud databases** (DynamoDB, BigQuery, Firebase) show strong relative desire, reflecting cloud migration trends.
+- **PostgreSQL** also tops the wanted list (12,193 respondents, ~65% of all respondents), confirming its dominance and continued growth trajectory.
+- **Redis, SQLite, MySQL, and MongoDB** follow, showing desire spread across relational and non-relational stores.
+- Several low-adoption databases show high want/have ratios (e.g. CockroachDB, DuckDB, Cassandra, ClickHouse) — early growth signals, though absolute counts remain small.
+- **MySQL** has a lower want share (33%) than current use (45%), consistent with a gradual shift toward PostgreSQL.
+- **Cloud databases** (DynamoDB, BigQuery, Supabase, Firebase) appear in the wanted list, reflecting cloud migration trends.
 
 **Implications:**
-- **PostgreSQL and MongoDB are the safest database skill investments** for the next 3-5 years.
-- **MySQL knowledge is depreciating** — existing MySQL users should prioritize learning PostgreSQL.
-- **DuckDB and ClickHouse represent early-stage opportunities** in analytics engineering.
+- **PostgreSQL is the safest database skill investment** for the next 3-5 years.
+- **MySQL knowledge is in relative decline** — its want share (33%) is below its current use (45%).
+- **Emerging analytical/NewSQL databases (DuckDB, ClickHouse, CockroachDB) are worth watching**, but current absolute adoption is small.
 - **Cloud-native databases (DynamoDB, BigQuery) are growing fast** — cloud skills complement database skills.
 
 ### 2.3 Cloud Platforms
@@ -537,7 +569,7 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 ![Satisfaction Factors](chart_jobsat_factors.png)
 
-**Data Context:** Based on 109,584 individual satisfaction-aspect ratings across 8 aspects (career satisfaction, coworkers, work-life balance, compensation, resources, autonomy, growth, management, retention). Each aspect is scored 0-100. Chart shows the average score per aspect. Respondents could rate multiple aspects.
+**Data Context:** Based on 109,584 individual satisfaction-aspect ratings across 9 aspects (career satisfaction, coworkers, work-life balance, compensation, resources, autonomy, growth, management, retention). Each aspect is scored 0-100. Chart shows the average score per aspect. Respondents could rate multiple aspects.
 
 ### 3.3 Satisfaction by Work Arrangement
 
@@ -575,7 +607,7 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 ![Compensation Distribution](chart_comp_dist.png)
 
-**Data Context:** Based on 9,550 respondents (9,295 missing, 49.3% of total). Compensation capped at the 99th percentile (~$635K) to handle extreme outliers. The raw data included values up to $6.3M before cleaning.
+**Data Context:** Based on 9,550 respondents (9,295 missing, 49.3% of total). Compensation is capped at the 99th percentile ($378,512) to handle extreme outliers; values above the cap are clipped to it.
 
 - **Mean**: $80,912
 - **Median**: $65,858
@@ -718,45 +750,45 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 ## Discussion
 
 ### Technology Trends
-The technology landscape revealed by this survey confirms several well-known trends while surfacing emerging patterns. The JavaScript ecosystem continues to dominate, but the rapid rise of TypeScript — now the #1 most-wanted language — signals a qualitative shift in developer preferences toward type safety at scale. This mirrors industry trends where large codebases increasingly adopt TypeScript for maintainability.
+The technology landscape revealed by this survey confirms several well-known trends while surfacing emerging patterns. The JavaScript ecosystem continues to dominate current usage, while TypeScript has risen to near parity between current use and desire — a signal of the shift toward type safety at scale in large codebases. Rust shows the strongest desire relative to current adoption, a forward-looking signal rather than current dominance.
 
 Rust and Go represent the most significant 'adoption gap' opportunities: relatively few developers currently use them, but demand is disproportionately high. For organizations hiring, prioritizing Rust or Go skills may yield access to a smaller but highly motivated talent pool.
 
-PostgreSQL's lead over MySQL in both current and desired usage confirms a long-anticipated tipping point. MySQL, once the default open-source relational database, is now in relative decline. DuckDB's emergence in the top 10 wanted databases despite minimal current usage is notable — it signals growing interest in embedded analytical databases, particularly among data engineers.
+PostgreSQL's lead over MySQL in both current and desired usage confirms a long-anticipated tipping point. MySQL, once the default open-source relational database, now has a lower want share than current use. Emerging analytical/NewSQL databases such as DuckDB show high want/have ratios from a small base — interest worth watching rather than current dominance.
 
 ### Job Satisfaction
-The mean satisfaction score of approximately 6.7/10 suggests moderate overall satisfaction, with a slight positive skew. The factors analysis reveals that career satisfaction, autonomy, and work-life balance rank highest, while compensation ranks lower — consistent with the well-known finding that beyond a certain threshold, additional income contributes less to overall job satisfaction than autonomy and growth opportunities.
+The mean satisfaction score of approximately 7.1/10 suggests moderate-to-high overall satisfaction. Among the individual satisfaction factors, **compensation** and **resources** score highest on average, while **coworkers** scores lowest. (See METHODOLOGY.md for how the factor scores are derived.)
 
-Remote workers consistently report higher satisfaction than in-person or hybrid workers, even when controlling for compensation levels. The satisfaction-by-age curve peaks in the 35-44 bracket, suggesting that mid-career represents a 'sweet spot' where experience has accumulated but burnout has not yet set in.
+Remote workers report higher average satisfaction than in-person workers, with hybrid workers in between. In this dataset, average satisfaction rises with age across the reported brackets (though the oldest brackets have small sample sizes). See the satisfaction-by-age chart for the exact shape rather than assuming a mid-career peak.
 
 ### Compensation Dynamics
-The compensation analysis reveals substantial geographic variation, with US developers earning a median of approximately $145K — roughly 2-3x the global median. The positive correlation between remote work and compensation is partly explained by geographic arbitrage: remote workers based in lower-cost regions can earn salaries benchmarked to higher-cost markets.
+The compensation analysis reveals substantial geographic variation. Among countries with at least 30 respondents, the highest national median is United States of America ($148,000), against a global median of $65,858. The positive correlation between remote work and compensation is partly explained by geographic arbitrage: remote workers based in lower-cost regions can earn salaries benchmarked to higher-cost markets.
 
-The experience-compensation scatter plot reveals diminishing returns after approximately 15-20 years of professional coding, with increasing variance in compensation at higher experience levels — suggesting that career progression (management, specialization, or entrepreneurship) has a greater impact on earnings than years of experience alone.
+The experience-compensation chart shows a steep rise in average pay over the first ~15 years of professional coding, after which it flattens while the spread widens — suggesting that career progression (management, specialisation, or entrepreneurship) matters more than additional years of experience alone.
 
 ### AI & The Future of Development
-AI sentiment is cautiously optimistic. While most respondents report positive or mixed feelings, a significant minority expresses concern. The age-based analysis of AI tool adoption shows that younger developers (18-34) are more likely to use AI tools in their workflow, suggesting that AI-assisted development will become increasingly normative as this cohort progresses in their careers.
+AI sentiment in this dataset is broadly favourable: favorable and very-favorable responses substantially outnumber unfavorable ones, with an indifferent/unsure minority. The age-based analysis of AI tool selection shows that younger developers are more likely to report using AI tools, suggesting AI-assisted development will become increasingly normative as this cohort progresses in their careers.
 
 ### Methodological Considerations
-Several limitations should be noted. The survey is self-selected and may over-represent certain demographics (English speakers, Stack Overflow users, web developers). Compensation data has notable missingness (~49%), which may introduce bias. The technology category definitions are fixed by the survey design and may not capture all relevant tools. The cross-sectional nature of the data means all relationships are correlational — causal inferences require caution.
+Several limitations should be noted. The survey is self-selected and may over-represent certain demographics (English speakers, Stack Overflow users, web developers). Compensation data has notable missingness (49%), which may introduce bias. The technology category definitions are fixed by the survey design and may not capture all relevant tools. The cross-sectional nature of the data means all relationships are correlational — causal inferences require caution.
 
 ---
 
 ## Summary of Key Findings
 
-1. **Technology Trends**: JavaScript remains dominant (79% adoption), TypeScript and Rust are rising fastest (TypeScript is #1 wanted at 27%, Rust enters top 10 wanted despite not being in top 10 current). Legacy technologies (Cobol, Fortran, Perl) show declining interest. PostgreSQL has overtaken MySQL as the leading database.
+1. **Technology Trends**: JavaScript remains dominant (79% adoption) and is also the most-wanted language (61%). TypeScript is close to parity between current use (57%) and desire (55%), and Rust has the strongest want/have ratio among major languages (~2.45x). PostgreSQL has overtaken MySQL as the leading database.
 
-2. **Job Satisfaction**: Average satisfaction is 6.7/10. Career satisfaction and autonomy rank highest among satisfaction factors. Remote workers are most satisfied. Satisfaction peaks at mid-career (35-44) and declines slightly after. Individual Contributors and Managers report similar satisfaction levels.
+2. **Job Satisfaction**: Average satisfaction is 7.1/10. **compensation** and **resources** rank highest among the individual satisfaction factors. Remote workers are most satisfied. Individual Contributors and Managers report similar satisfaction levels.
 
-3. **Compensation**: Global median compensation is ~$55K. US developers earn the highest median (~$145K). Engineering managers, DevOps specialists, and senior executives top the compensation charts. Remote work correlates with higher pay across most countries. Compensation-education correlation exists but is weaker than compensation-experience.
+3. **Compensation**: Global median compensation is $65,858. Among countries with at least 30 respondents, the highest national median is United States of America ($148,000). Engineering managers, DevOps specialists, and senior executives top the compensation charts. Remote work correlates with higher pay across most countries. Compensation-education correlation exists but is weaker than compensation-experience.
 
-4. **Geography**: JavaScript is ubiquitous globally (70%+ in all top-10 countries). TypeScript adoption is strongest in Western Europe. Python is particularly strong in India and the UK, driven by outsourcing and data science demand.
+4. **Geography**: The country×language heatmap shows JavaScript near the top of the language mix across all large countries in the dataset, with country-level differences in the relative adoption of TypeScript and Python. Differences for smaller countries should be read cautiously (see §5.1).
 
-5. **Age**: Younger developers favor TypeScript, Python, and Rust. Older developers stay with C#, Java, and established ecosystems. AI tool adoption is highest in the 18-34 demographic. The experience-compensation curve shows diminishing returns after 15-20 years.
+5. **Age**: The language mix and AI-tool selection vary by age group (see §6.1 and §7.2). The experience-compensation chart shows pay rising steeply early in a career and flattening afterwards, with widening variance.
 
-6. **AI & Learning**: AI sentiment is cautiously optimistic — mixed/positive responses dominate. Coding bootcamps and online learning produce competitive compensation outcomes vs traditional education, suggesting the skills market values demonstrated ability over credentials.
+6. **AI & Learning**: AI sentiment in this dataset is broadly favourable — favorable and very-favorable responses far outnumber unfavorable ones. Median compensation varies by learning source; see the learning-pathway chart rather than assuming a single ranking.
 
-7. **Work Patterns**: Remote work correlates with higher satisfaction AND compensation across most geographies and roles. The hybrid work model shows intermediate outcomes. Side hustles (full-time employment combined with contracting) are common and associated with higher total compensation.
+7. **Work Patterns**: Remote work is associated with higher average satisfaction and higher median pay than in-person work, with hybrid work in between. These are descriptive correlations (see §4.6, §3.3, and LIMITATIONS.md).
 
 ---
 
@@ -776,7 +808,7 @@ Several limitations should be noted. The survey is self-selected and may over-re
 
 ### For Educators & Training Providers
 - **TypeScript and Python should be core curriculum** — they represent both current demand and future growth.
-- **DuckDB and cloud databases deserve curriculum attention** — interest is growing faster than current educational coverage.
+- **Emerging analytical databases (e.g. DuckDB) and cloud databases deserve curriculum attention** — they show strong want/have ratios from a small current base.
 - **Bootcamps and self-directed learning are validated pathways** — the market rewards skill over credentials.
 
 ### For the Industry
@@ -788,7 +820,7 @@ Several limitations should be noted. The survey is self-selected and may over-re
 
 ## Conclusion
 
-The 2024 Stack Overflow Developer Survey reveals a developer ecosystem in transition. The technology landscape is being reshaped by the TypeScript revolution, the PostgreSQL ascendancy, and the early but accelerating impact of AI tools. Job satisfaction remains moderate, driven primarily by autonomy and career growth rather than compensation alone. Remote work has cemented its place as a structural feature of the industry, correlating positively with both happiness and earnings.
+The 2024 Stack Overflow Developer Survey reveals a developer ecosystem in transition. The technology landscape is being reshaped by the continued dominance of JavaScript, the maturation of TypeScript, the PostgreSQL ascendancy, and the early but accelerating impact of AI tools. Job satisfaction is moderate-to-high on average, and its factor scores are led by **compensation** and **resources** in this dataset. Remote work has cemented its place as a structural feature of the industry, correlating positively with both satisfaction and earnings.
 
 For developers, the message is clear: invest in TypeScript, PostgreSQL, and cloud-native skills; prioritize remote-capable roles; and prepare for AI-assisted development as the new normal. For employers, the data supports investing in developer experience, offering flexible work arrangements, and modernizing technology stacks to attract and retain top talent.
 
