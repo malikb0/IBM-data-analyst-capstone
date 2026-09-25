@@ -1,15 +1,42 @@
+import argparse
+import os
 import sqlite3
-import pandas as pd
-import numpy as np
 import statistics
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import os
+import numpy as np
+import pandas as pd
 
-OUTPUT_DIR = "output"
-DB_PATH = "survey_cleaned.sqlite"
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Generate the charts and analysis report from the survey SQLite database."
+    )
+    parser.add_argument(
+        "--db",
+        default=os.environ.get("SURVEY_DB", "survey_cleaned.sqlite"),
+        help="input SQLite database (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=os.environ.get("SURVEY_OUTPUT", "output"),
+        help="directory for charts and the report (default: %(default)s)",
+    )
+    return parser.parse_args(argv)
+
+
+ARGS = parse_args()
+DB_PATH = ARGS.db
+OUTPUT_DIR = ARGS.output_dir
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+if not os.path.exists(DB_PATH):
+    raise SystemExit(
+        f"database not found: {DB_PATH}\n"
+        "Build it first with `make build-db` (full run) or `make demo` (offline sample)."
+    )
 
 print("Connecting to database...")
 conn = sqlite3.connect(DB_PATH)
@@ -61,9 +88,9 @@ def save_scatter(data, x, y, title, fname, color="#2E86AB", alpha=0.3):
 print("Loading bulk data...")
 
 TECH_CATEGORIES = [
-    ("language", "language"), ("database", "database"), ("platform", "platform"),
-    ("webframe", "webframe"), ("embedded", "embedded"), ("misctech", "misctech"),
-    ("toolstech", "toolstech"), ("collabtools", "NEWCollabTools"),
+    ("language", "Language"), ("database", "Database"), ("platform", "Platform"),
+    ("webframe", "Webframe"), ("embedded", "Embedded"), ("misctech", "MiscTech"),
+    ("toolstech", "ToolsTech"), ("collabtools", "NEWCollabTools"),
     ("officestackasync", "OfficeStackAsync"), ("officestacksync", "OfficeStackSync"),
     ("aistack", "AISearchDev"),
 ]
@@ -106,6 +133,10 @@ lang_want = lang_want.sort_values("count", ascending=False).head(10)
 save_bar(lang_want, "tech_name", "count",
          "Top 10 Programming Languages Desired to Work With", "chart_lang_wanted.png",
          xlabel="Language", ylabel="Respondents")
+
+# Share of all respondents, used by the narrative text below (computed, not hardcoded).
+lang_have_pct = (lang_have.set_index("tech_name")["count"] / total_respondents * 100).to_dict()
+lang_want_pct = (lang_want.set_index("tech_name")["count"] / total_respondents * 100).to_dict()
 
 # Top 10 databases currently used
 db_have = tech_data["database_have"].groupby("tech_name").size().reset_index(name="count")
@@ -576,15 +607,107 @@ FROM respondents
 total_resp = conn2.execute("SELECT COUNT(*) FROM respondents").fetchone()[0]
 conn2.close()
 
+# ── Computed facts used by the report prose (never hardcode these) ──────────
+db_size_mb = os.path.getsize(DB_PATH) / (1024 * 1024)
+n_countries = int(respondents["country"].nunique())
+n_tables = len(all_tables)
+n_aspects = int(job_sat_points["aspect"].nunique())
+comp_cap = comp_max_val
+comp_missing_pct = comp_null / total_resp * 100
+lang_js = lang_have_pct.get("JavaScript", 0.0)
+lang_ts_have = lang_have_pct.get("TypeScript", 0.0)
+lang_ts_want = lang_want_pct.get("TypeScript", 0.0)
+lang_rust_want = lang_want_pct.get("Rust", 0.0)
+lang_js_want = lang_want_pct.get("JavaScript", 0.0)
+lang_sql = lang_have_pct.get("SQL", 0.0)
+lang_html = lang_have_pct.get("HTML/CSS", 0.0)
+lang_py_have = lang_have_pct.get("Python", 0.0)
+lang_py_want = lang_want_pct.get("Python", 0.0)
+lang_go_want = lang_want_pct.get("Go", 0.0)
+lang_kotlin_want = lang_want_pct.get("Kotlin", 0.0)
+lang_js_count = int(lang_have.loc[lang_have["tech_name"] == "JavaScript", "count"].sum())
+
+_country_stats = (
+    respondents.dropna(subset=["converted_comp_yearly"])
+    .groupby("country")["converted_comp_yearly"]
+    .agg(["median", "count"])
+)
+_country_stats = _country_stats[_country_stats["count"] >= 30].sort_values(
+    "median", ascending=False
+)
+top_comp_country = _country_stats.index[0] if len(_country_stats) else "n/a"
+top_comp_median = float(_country_stats["median"].iloc[0]) if len(_country_stats) else float("nan")
+us_mask = respondents["country"].fillna("").str.contains("United States")
+us_median = respondents.loc[us_mask, "converted_comp_yearly"].median()
+us_median_display = f"${us_median:,.0f}" if pd.notna(us_median) else "n/a"
+global_median = comp_median_val
+
+
+def _cat_count(key, tech):
+    d = tech_data[key]
+    return int((d["tech_name"] == tech).sum())
+
+
+rust_have_n = _cat_count("language_have", "Rust")
+rust_want_n = _cat_count("language_want", "Rust")
+rust_ratio = rust_want_n / rust_have_n if rust_have_n else float("nan")
+ts_have_n = _cat_count("language_have", "TypeScript")
+ts_want_n = _cat_count("language_want", "TypeScript")
+ts_ratio = ts_want_n / ts_have_n if ts_have_n else float("nan")
+lang_want_top = lang_want.iloc[0]["tech_name"] if len(lang_want) else "n/a"
+lang_want_top_pct = lang_want_pct.get(lang_want_top, 0.0)
+
+_sat_sorted = sat_factors.sort_values("avg_score", ascending=False)
+sat_top = _sat_sorted.iloc[0]["aspect"] if len(_sat_sorted) else "n/a"
+sat_second = _sat_sorted.iloc[1]["aspect"] if len(_sat_sorted) > 1 else "n/a"
+sat_low = _sat_sorted.iloc[-1]["aspect"] if len(_sat_sorted) else "n/a"
+
+_db_have = tech_data["database_have"].groupby("tech_name").size()
+_db_want = tech_data["database_want"].groupby("tech_name").size()
+
+
+def _pct_of_total(series, name):
+    return series.get(name, 0) / total_resp * 100
+
+
+pg_want_n = int(_db_want.get("PostgreSQL", 0))
+pg_want_pct = _pct_of_total(_db_want, "PostgreSQL")
+mysql_have_pct = _pct_of_total(_db_have, "MySQL")
+mysql_want_pct = _pct_of_total(_db_want, "MySQL")
+
 # Build report
 lines = []
 def L(text=""): lines.append(text)
 
 L("# Survey Data Analysis Report")
 L()
+L("> **Generated artifact — do not edit by hand.** This report and the charts in this")
+L("> directory are produced by `generate_report.py` from the SQLite database")
+L(f"> `{os.path.basename(DB_PATH)}`.")
+L(">")
+L("> - **Dataset:** Stack Overflow Developer Survey 2024 (ODbL). See `NOTICE.md`.")
+L("> - **Pipeline:** `build_database.py` → `generate_report.py` (see `METHODOLOGY.md`).")
+L("> - **Regenerate:** `make demo` (offline sample) or")
+L(">   `make fetch-data && make build-db && make report` (full run).")
+L(">")
+L("> Figures labelled *Data Context* and the summary tables below are computed at run")
+L("> time, as are the percentages quoted in the narrative. The charts are the")
+L("> authoritative source; prose is descriptive, not causal.")
+L()
 L("## Executive Summary")
 L()
-L("This report presents a comprehensive analysis of the Stack Overflow 2024 Developer Survey dataset, covering 18,845 respondents from 180+ countries. The analysis explores technology trends, job satisfaction patterns, compensation distributions, geographic and demographic technology preferences, and the interplay between work arrangements, compensation, and satisfaction. Key findings include the continued dominance of JavaScript and the rapid rise of TypeScript, PostgreSQL's leadership in databases, the positive correlation between remote work and both satisfaction and compensation, and the emergence of AI tools as a significant factor in the developer ecosystem.")
+L(
+    f"This report analyses the Stack Overflow 2024 Developer Survey, covering "
+    f"{total_resp:,} respondents from {n_countries} countries and territories. "
+    "The pipeline cleans and normalises the survey into a relational SQLite model "
+    f"({n_tables} tables), then derives the charts and findings below. The analysis "
+    "covers technology trends, job satisfaction, compensation, geography, age, and AI "
+    "tooling. Headline patterns: JavaScript remains the most widely used language, "
+    "TypeScript and Rust show the strongest forward-looking demand, PostgreSQL leads "
+    "databases, remote work correlates with higher satisfaction and pay, and AI tools "
+    "are already part of many developers' workflows. All findings are descriptive and "
+    "correlational (see the Discussion and `LIMITATIONS.md`)."
+)
 L()
 L("## 1. Data Overview & Database Schema")
 L()
@@ -594,22 +717,22 @@ L("| Metric | Value |")
 L("|--------|-------|")
 L(f"| **Total Respondents** | {total_resp:,} |")
 L("| **Columns (CSV)** | 114 |")
-L("| **Normalized Tables (SQLite)** | 39 |")
-L("| **Database Size** | ~186 MB |")
-L("| **Countries Represented** | 180+ |")
+L(f"| **Normalized Tables (SQLite)** | {n_tables} |")
+L(f"| **Database Size** | {db_size_mb:,.0f} MB |")
+L(f"| **Countries Represented** | {n_countries} |")
 L()
 L("### Data Cleaning Applied")
 L()
 L("| Column | Issue | Cleaning |")
 L("|--------|-------|----------|")
 L("| `YearsCode` / `YearsCodePro` | Text values: 'Less than 1 year', 'More than 50 years' | Mapped to 0.5 and 55 respectively |")
-L("| `ConvertedCompYearly` | Extreme outliers (up to $6.3M) | Capped at 99th percentile (~$635K) |")
-L("| `Age` | 'Prefer not to say' (24 responses) | Mapped to NULL |")
-L("| `Employment` | Semicolon-delimited multi-values | Normalized into `respondent_employment` table |")
-L("| `DevType` | Semicolon-delimited multi-values | Normalized into `respondent_devtype` table |")
-L("| `LearnCode`, `CodingActivities` | Semicolon-delimited multi-values | Normalized into separate tables |")
-L("| All 33 `*HaveWorkedWith`, `*WantToWorkWith`, `*Admired` columns | 11 categories × 3 variants, semicolon-delimited | Normalized into 33 per-category tables |")
-L("| `Knowledge_1` through `Knowledge_9` | Likert text responses | Mapped to numeric scores (1=Strongly disagree..5=Strongly agree) |")
+L(f"| `ConvertedCompYearly` | Extreme outliers | Capped at the 99th percentile (${comp_cap:,.0f}); values above are clipped |")
+L("| `Age` | 'Prefer not to say' and unmapped values | Mapped to NULL |")
+L("| `Employment` | Semicolon-delimited multi-values | Normalized into `respondent_employment` (de-duplicated per respondent) |")
+L("| `DevType` | Semicolon-delimited multi-values | Normalized into `respondent_devtype` (de-duplicated per respondent) |")
+L("| `LearnCode`, `CodingActivities` | Semicolon-delimited multi-values | Normalized into separate tables (de-duplicated per respondent) |")
+L("| All 33 `*HaveWorkedWith`, `*WantToWorkWith`, `*Admired` columns | 11 categories × 3 variants, semicolon-delimited | Normalized into 33 per-category tables (de-duplicated per respondent × value) |")
+L("| `Knowledge_1` through `Knowledge_9` | Likert text responses | Mapped to numeric scores (1=Strongly disagree..5=Strongly agree); unmapped → NULL + warning |")
 L("| `JobSatPoints_*` | Scattered 0-100 scores | Normalized into `job_satisfaction_points` table with aspect labels |")
 L()
 L("### Key Null Statistics")
@@ -626,24 +749,15 @@ L("### Database Entity-Relationship Diagram")
 L()
 L("```mermaid")
 L("erDiagram")
-L("    respondents ||--o{ language_have : has")
-L("    respondents ||--o{ language_want : wants")
-L("    respondents ||--o{ language_admired : admires")
-L("    respondents ||--o{ database_have : has")
-L("    respondents ||--o{ database_want : wants")
-L("    respondents ||--o{ database_admired : admires")
-L("    respondents ||--o{ platform_have : has")
-L("    respondents ||--o{ platform_want : wants")
-L("    respondents ||--o{ platform_admired : admires")
-L("    respondents ||--o{ webframe_have : has")
-L("    respondents ||--o{ webframe_want : wants")
-L("    respondents ||--o{ webframe_admired : admires")
-L("    respondents ||--o{ toolstech_have : has")
-L("    respondents ||--o{ respondent_devtype : categorized_as")
-L("    respondents ||--o{ respondent_learn_code : learned_from")
-L("    respondents ||--o{ respondent_coding_activities : codes_for")
-L("    respondents ||--o{ job_satisfaction_points : rates")
-L("    respondents ||--o{ knowledge_self_assessment : self_assesses")
+for _cat, _tbl_pref in TECH_CATEGORIES:
+    for _var in VARIANTS:
+        L(f"    respondents ||--o{{ {_tbl_pref}_{_var} : references")
+L("    respondents ||--o{ respondent_employment : references")
+L("    respondents ||--o{ respondent_devtype : references")
+L("    respondents ||--o{ respondent_learn_code : references")
+L("    respondents ||--o{ respondent_coding_activities : references")
+L("    respondents ||--o{ job_satisfaction_points : references")
+L("    respondents ||--o{ knowledge_self_assessment : references")
 L("")
 L("    respondents {")
 L("        int respondent_id PK")
@@ -684,7 +798,7 @@ L("```")
 L()
 L("Note: The diagram shows representative tables for brevity. The full schema includes 33 per-category technology tables (11 categories × 3 variants: have/want/admired) and 6 junction tables for employment types, developer roles, learning sources, coding activities, satisfaction points, and knowledge assessments. All per-category tech tables share the same structure as `language_have`.")
 L()
-L("### Database Schema (39 Tables)")
+L(f"### Database Schema ({n_tables} Tables)")
 L()
 for s in schema_lines:
     L(s)
@@ -700,14 +814,14 @@ L("![Languages Currently Used](chart_lang_current.png)")
 L()
 L(f"**Data Context:** Based on {len(tech_data['language_have']):,} responses from {total_resp:,} total respondents. Each respondent could select multiple languages. Chart shows the top 10 languages by raw count of respondents who reported using them. No outlier removal applied — all valid responses included.")
 L()
-L("**This chart shows the top 10 programming languages respondents currently use.** JavaScript leads with nearly 15,000 respondents, followed by SQL and HTML/CSS — reflecting the web-centric nature of the developer population.")
+L(f"**This chart shows the top 10 programming languages respondents currently use.** JavaScript leads with {lang_js_count:,} respondents, followed by SQL and HTML/CSS — reflecting the web-centric nature of the developer population.")
 L()
 L("**Key Findings:**")
-L("- **JavaScript** dominates with ~79% adoption — it is the baseline requirement for modern web development.")
-L("- **SQL** ranks second (~67%), confirming that data manipulation skills are almost as universal as front-end skills.")
-L("- **HTML/CSS** ranks third (~66%), consistent with the high proportion of front-end and full-stack developers.")
-L("- **TypeScript** (~57%) has already surpassed Java and C# in current usage, marking its rapid rise.")
-L("- **Python** (~51%) rounds out the top 5, driven by data science and automation use cases.")
+L(f"- **JavaScript** dominates with ~{lang_js:.0f}% adoption — it is the baseline requirement for modern web development.")
+L(f"- **SQL** ranks second (~{lang_sql:.0f}%), confirming that data manipulation skills are almost as universal as front-end skills.")
+L(f"- **HTML/CSS** ranks third (~{lang_html:.0f}%), consistent with the high proportion of front-end and full-stack developers.")
+L(f"- **TypeScript** (~{lang_ts_have:.0f}%) has already surpassed Java and C# in current usage, marking its rapid rise.")
+L(f"- **Python** (~{lang_py_have:.0f}%) rounds out the top 5, driven by data science and automation use cases.")
 L("- **Bash/Shell** and **C#** follow, reflecting systems and enterprise development respectively.")
 L()
 L("**Implications:**")
@@ -724,15 +838,15 @@ L()
 L("**This chart shows the top 10 languages respondents want to work with — a forward-looking indicator of where developers are investing their learning time.**")
 L()
 L("**Key Findings:**")
-L("- **TypeScript** tops the wanted list (~27%), surpassing even JavaScript (~27% as well). Its want-to-have ratio is the strongest among major languages.")
-L("- **Python** ranks second (~24%), showing sustained interest beyond current users.")
-L("- **Rust** enters the top 10 wanted list (~7%) despite not being in the top 10 current — a clear growth signal.")
-L("- **Go** (~9%) and **Kotlin** (~8%) show strong desire, reflecting cloud-native and Android ecosystem trends.")
-L("- **JavaScript** and **HTML/CSS** have lower want percentages relative to current usage — they are considered 'solved' skills.")
+L(f"- **{lang_want_top}** is the most-wanted language (~{lang_want_top_pct:.0f}%), followed by SQL and TypeScript. Raw desire is dominated by the established leaders that most respondents already use.")
+L(f"- **TypeScript** (~{lang_ts_want:.0f}% want vs ~{lang_ts_have:.0f}% current use) is close to parity with its current adoption, reflecting its continued growth.")
+L(f"- **Rust** has the strongest want/have ratio among major languages (~{rust_ratio:.2f}x: {rust_have_n:,} use it, {rust_want_n:,} want to), a clear growth signal.")
+L(f"- **Go** (~{lang_go_want:.0f}%) and **Kotlin** (~{lang_kotlin_want:.0f}%) show solid desire, reflecting cloud-native and Android ecosystem trends.")
+L("- **JavaScript** and **HTML/CSS** have lower want/have ratios (<1) relative to current usage — they are mature, 'solved' skills for many respondents.")
 L()
 L("**Implications:**")
-L("- **TypeScript is the single best language for career development** — high current usage AND highest desire signal a long growth runway.")
-L("- **Rust and Go represent the biggest 'gap' opportunities** — few developers know them but many want to learn.")
+L(f"- **TypeScript combines high current usage ({lang_ts_have:.0f}%) with strong, sustained desire ({lang_ts_want:.0f}%)** — a stable skill investment.")
+L("- **Rust and Go represent the biggest 'gap' opportunities** — fewer developers know them but many want to learn.")
 L("- **Python demand is sustained by AI/ML growth**, not just current data science roles.")
 L()
 L("### 2.2 Databases")
@@ -743,15 +857,14 @@ L("![Databases Currently Used](chart_db_current.png)")
 L()
 L(f"**Data Context:** Based on {len(tech_data['database_have']):,} responses from {total_resp:,} total respondents. Chart shows the top 10 databases by raw adoption count. No data cleaning applied beyond the standard ConvertedCompYearly cap at the 99th percentile.")
 L()
-L("**This chart shows the top 10 databases respondents currently use.** PostgreSQL leads with the highest adoption, followed by SQLite and MySQL.")
+L("**This chart shows the top 10 databases respondents currently use.** PostgreSQL leads with the highest adoption, followed by MySQL, SQLite, and MongoDB.")
 L()
 L("**Key Findings:**")
 L("- **PostgreSQL** is the most used database, reflecting its open-source nature, strong feature set, and enterprise adoption.")
-L("- **SQLite** ranks second, driven by its ubiquity in mobile, embedded, and local development environments.")
-L("- **MySQL** ranks third but has been losing ground to PostgreSQL in recent years.")
+L("- **MySQL** ranks second and **SQLite** third, driven respectively by legacy web stacks and by ubiquity in mobile, embedded, and local development.")
 L("- **MongoDB** leads the NoSQL category, confirming its place as the default document database.")
 L("- **Redis** and **Elasticsearch** show strong usage in caching and search use cases respectively.")
-L("- **SQL Server** remains relevant in enterprise .NET environments.")
+L("- **Microsoft SQL Server** remains relevant in enterprise .NET environments.")
 L()
 L("**Implications:**")
 L("- **PostgreSQL expertise is the most valuable database skill** for broad employability.")
@@ -766,17 +879,16 @@ L()
 L("**This chart shows the top 10 databases respondents want to work with — revealing where database interest is migrating.**")
 L()
 L("**Key Findings:**")
-L("- **PostgreSQL** also tops the wanted list, confirming its dominance and continued growth trajectory.")
-L("- **MongoDB** ranks second in desire, showing sustained NoSQL interest beyond current adoption.")
-L("- **DuckDB** enters the top 10 despite low current usage — it represents the fastest-growing analytical database interest.")
-L("- **ClickHouse** also shows up as a rising column-oriented database for analytics workloads.")
-L("- **MySQL** drops significantly in the want ranking compared to current usage — developers are actively moving away.")
-L("- **Cloud databases** (DynamoDB, BigQuery, Firebase) show strong relative desire, reflecting cloud migration trends.")
+L(f"- **PostgreSQL** also tops the wanted list ({pg_want_n:,} respondents, ~{pg_want_pct:.0f}% of all respondents), confirming its dominance and continued growth trajectory.")
+L("- **Redis, SQLite, MySQL, and MongoDB** follow, showing desire spread across relational and non-relational stores.")
+L("- Several low-adoption databases show high want/have ratios (e.g. CockroachDB, DuckDB, Cassandra, ClickHouse) — early growth signals, though absolute counts remain small.")
+L(f"- **MySQL** has a lower want share ({mysql_want_pct:.0f}%) than current use ({mysql_have_pct:.0f}%), consistent with a gradual shift toward PostgreSQL.")
+L("- **Cloud databases** (DynamoDB, BigQuery, Supabase, Firebase) appear in the wanted list, reflecting cloud migration trends.")
 L()
 L("**Implications:**")
-L("- **PostgreSQL and MongoDB are the safest database skill investments** for the next 3-5 years.")
-L("- **MySQL knowledge is depreciating** — existing MySQL users should prioritize learning PostgreSQL.")
-L("- **DuckDB and ClickHouse represent early-stage opportunities** in analytics engineering.")
+L("- **PostgreSQL is the safest database skill investment** for the next 3-5 years.")
+L(f"- **MySQL knowledge is in relative decline** — its want share ({mysql_want_pct:.0f}%) is below its current use ({mysql_have_pct:.0f}%).")
+L("- **Emerging analytical/NewSQL databases (DuckDB, ClickHouse, CockroachDB) are worth watching**, but current absolute adoption is small.")
 L("- **Cloud-native databases (DynamoDB, BigQuery) are growing fast** — cloud skills complement database skills.")
 L()
 L("### 2.3 Cloud Platforms")
@@ -814,7 +926,7 @@ L("### 3.2 What Makes Developers Satisfied?")
 L()
 L("![Satisfaction Factors](chart_jobsat_factors.png)")
 L()
-L(f"**Data Context:** Based on {sat_factor_total:,} individual satisfaction-aspect ratings across 8 aspects (career satisfaction, coworkers, work-life balance, compensation, resources, autonomy, growth, management, retention). Each aspect is scored 0-100. Chart shows the average score per aspect. Respondents could rate multiple aspects.")
+L(f"**Data Context:** Based on {sat_factor_total:,} individual satisfaction-aspect ratings across {n_aspects} aspects (career satisfaction, coworkers, work-life balance, compensation, resources, autonomy, growth, management, retention). Each aspect is scored 0-100. Chart shows the average score per aspect. Respondents could rate multiple aspects.")
 L()
 L("### 3.3 Satisfaction by Work Arrangement")
 L()
@@ -853,7 +965,7 @@ L("### 4.1 Overall Distribution")
 L()
 L("![Compensation Distribution](chart_comp_dist.png)")
 L()
-L(f"**Data Context:** Based on {len(comp):,} respondents ({comp_null:,} missing, {comp_null/total_resp*100:.1f}% of total). Compensation capped at the 99th percentile (~$635K) to handle extreme outliers. The raw data included values up to $6.3M before cleaning.")
+L(f"**Data Context:** Based on {len(comp):,} respondents ({comp_null:,} missing, {comp_missing_pct:.1f}% of total). Compensation is capped at the 99th percentile (${comp_cap:,.0f}) to handle extreme outliers; values above the cap are clipped to it.")
 L()
 L(f"- **Mean**: ${comp_mean_val:,.0f}")
 L(f"- **Median**: ${comp_median_val:,.0f}")
@@ -999,45 +1111,45 @@ L()
 L("## Discussion")
 L()
 L("### Technology Trends")
-L("The technology landscape revealed by this survey confirms several well-known trends while surfacing emerging patterns. The JavaScript ecosystem continues to dominate, but the rapid rise of TypeScript — now the #1 most-wanted language — signals a qualitative shift in developer preferences toward type safety at scale. This mirrors industry trends where large codebases increasingly adopt TypeScript for maintainability.")
+L("The technology landscape revealed by this survey confirms several well-known trends while surfacing emerging patterns. The JavaScript ecosystem continues to dominate current usage, while TypeScript has risen to near parity between current use and desire — a signal of the shift toward type safety at scale in large codebases. Rust shows the strongest desire relative to current adoption, a forward-looking signal rather than current dominance.")
 L()
 L("Rust and Go represent the most significant 'adoption gap' opportunities: relatively few developers currently use them, but demand is disproportionately high. For organizations hiring, prioritizing Rust or Go skills may yield access to a smaller but highly motivated talent pool.")
 L()
-L("PostgreSQL's lead over MySQL in both current and desired usage confirms a long-anticipated tipping point. MySQL, once the default open-source relational database, is now in relative decline. DuckDB's emergence in the top 10 wanted databases despite minimal current usage is notable — it signals growing interest in embedded analytical databases, particularly among data engineers.")
+L("PostgreSQL's lead over MySQL in both current and desired usage confirms a long-anticipated tipping point. MySQL, once the default open-source relational database, now has a lower want share than current use. Emerging analytical/NewSQL databases such as DuckDB show high want/have ratios from a small base — interest worth watching rather than current dominance.")
 L()
 L("### Job Satisfaction")
-L("The mean satisfaction score of approximately 6.7/10 suggests moderate overall satisfaction, with a slight positive skew. The factors analysis reveals that career satisfaction, autonomy, and work-life balance rank highest, while compensation ranks lower — consistent with the well-known finding that beyond a certain threshold, additional income contributes less to overall job satisfaction than autonomy and growth opportunities.")
+L(f"The mean satisfaction score of approximately {jobsat_mean:.1f}/10 suggests moderate-to-high overall satisfaction. Among the individual satisfaction factors, **{sat_top}** and **{sat_second}** score highest on average, while **{sat_low}** scores lowest. (See METHODOLOGY.md for how the factor scores are derived.)")
 L()
-L("Remote workers consistently report higher satisfaction than in-person or hybrid workers, even when controlling for compensation levels. The satisfaction-by-age curve peaks in the 35-44 bracket, suggesting that mid-career represents a 'sweet spot' where experience has accumulated but burnout has not yet set in.")
+L("Remote workers report higher average satisfaction than in-person workers, with hybrid workers in between. In this dataset, average satisfaction rises with age across the reported brackets (though the oldest brackets have small sample sizes). See the satisfaction-by-age chart for the exact shape rather than assuming a mid-career peak.")
 L()
 L("### Compensation Dynamics")
-L("The compensation analysis reveals substantial geographic variation, with US developers earning a median of approximately $145K — roughly 2-3x the global median. The positive correlation between remote work and compensation is partly explained by geographic arbitrage: remote workers based in lower-cost regions can earn salaries benchmarked to higher-cost markets.")
+L(f"The compensation analysis reveals substantial geographic variation. Among countries with at least 30 respondents, the highest national median is {top_comp_country} (${top_comp_median:,.0f}), against a global median of ${global_median:,.0f}. The positive correlation between remote work and compensation is partly explained by geographic arbitrage: remote workers based in lower-cost regions can earn salaries benchmarked to higher-cost markets.")
 L()
-L("The experience-compensation scatter plot reveals diminishing returns after approximately 15-20 years of professional coding, with increasing variance in compensation at higher experience levels — suggesting that career progression (management, specialization, or entrepreneurship) has a greater impact on earnings than years of experience alone.")
+L("The experience-compensation chart shows a steep rise in average pay over the first ~15 years of professional coding, after which it flattens while the spread widens — suggesting that career progression (management, specialisation, or entrepreneurship) matters more than additional years of experience alone.")
 L()
 L("### AI & The Future of Development")
-L("AI sentiment is cautiously optimistic. While most respondents report positive or mixed feelings, a significant minority expresses concern. The age-based analysis of AI tool adoption shows that younger developers (18-34) are more likely to use AI tools in their workflow, suggesting that AI-assisted development will become increasingly normative as this cohort progresses in their careers.")
+L("AI sentiment in this dataset is broadly favourable: favorable and very-favorable responses substantially outnumber unfavorable ones, with an indifferent/unsure minority. The age-based analysis of AI tool selection shows that younger developers are more likely to report using AI tools, suggesting AI-assisted development will become increasingly normative as this cohort progresses in their careers.")
 L()
 L("### Methodological Considerations")
-L("Several limitations should be noted. The survey is self-selected and may over-represent certain demographics (English speakers, Stack Overflow users, web developers). Compensation data has notable missingness (~49%), which may introduce bias. The technology category definitions are fixed by the survey design and may not capture all relevant tools. The cross-sectional nature of the data means all relationships are correlational — causal inferences require caution.")
+L(f"Several limitations should be noted. The survey is self-selected and may over-represent certain demographics (English speakers, Stack Overflow users, web developers). Compensation data has notable missingness ({comp_missing_pct:.0f}%), which may introduce bias. The technology category definitions are fixed by the survey design and may not capture all relevant tools. The cross-sectional nature of the data means all relationships are correlational — causal inferences require caution.")
 L()
 L("---")
 L()
 L("## Summary of Key Findings")
 L()
-L("1. **Technology Trends**: JavaScript remains dominant (79% adoption), TypeScript and Rust are rising fastest (TypeScript is #1 wanted at 27%, Rust enters top 10 wanted despite not being in top 10 current). Legacy technologies (Cobol, Fortran, Perl) show declining interest. PostgreSQL has overtaken MySQL as the leading database.")
+L(f"1. **Technology Trends**: JavaScript remains dominant ({lang_js:.0f}% adoption) and is also the most-wanted language ({lang_want_top_pct:.0f}%). TypeScript is close to parity between current use ({lang_ts_have:.0f}%) and desire ({lang_ts_want:.0f}%), and Rust has the strongest want/have ratio among major languages (~{rust_ratio:.2f}x). PostgreSQL has overtaken MySQL as the leading database.")
 L()
-L("2. **Job Satisfaction**: Average satisfaction is 6.7/10. Career satisfaction and autonomy rank highest among satisfaction factors. Remote workers are most satisfied. Satisfaction peaks at mid-career (35-44) and declines slightly after. Individual Contributors and Managers report similar satisfaction levels.")
+L(f"2. **Job Satisfaction**: Average satisfaction is {jobsat_mean:.1f}/10. **{sat_top}** and **{sat_second}** rank highest among the individual satisfaction factors. Remote workers are most satisfied. Individual Contributors and Managers report similar satisfaction levels.")
 L()
-L("3. **Compensation**: Global median compensation is ~$55K. US developers earn the highest median (~$145K). Engineering managers, DevOps specialists, and senior executives top the compensation charts. Remote work correlates with higher pay across most countries. Compensation-education correlation exists but is weaker than compensation-experience.")
+L(f"3. **Compensation**: Global median compensation is ${global_median:,.0f}. Among countries with at least 30 respondents, the highest national median is {top_comp_country} (${top_comp_median:,.0f}). Engineering managers, DevOps specialists, and senior executives top the compensation charts. Remote work correlates with higher pay across most countries. Compensation-education correlation exists but is weaker than compensation-experience.")
 L()
-L("4. **Geography**: JavaScript is ubiquitous globally (70%+ in all top-10 countries). TypeScript adoption is strongest in Western Europe. Python is particularly strong in India and the UK, driven by outsourcing and data science demand.")
+L("4. **Geography**: The country×language heatmap shows JavaScript near the top of the language mix across all large countries in the dataset, with country-level differences in the relative adoption of TypeScript and Python. Differences for smaller countries should be read cautiously (see §5.1).")
 L()
-L("5. **Age**: Younger developers favor TypeScript, Python, and Rust. Older developers stay with C#, Java, and established ecosystems. AI tool adoption is highest in the 18-34 demographic. The experience-compensation curve shows diminishing returns after 15-20 years.")
+L("5. **Age**: The language mix and AI-tool selection vary by age group (see §6.1 and §7.2). The experience-compensation chart shows pay rising steeply early in a career and flattening afterwards, with widening variance.")
 L()
-L("6. **AI & Learning**: AI sentiment is cautiously optimistic — mixed/positive responses dominate. Coding bootcamps and online learning produce competitive compensation outcomes vs traditional education, suggesting the skills market values demonstrated ability over credentials.")
+L("6. **AI & Learning**: AI sentiment in this dataset is broadly favourable — favorable and very-favorable responses far outnumber unfavorable ones. Median compensation varies by learning source; see the learning-pathway chart rather than assuming a single ranking.")
 L()
-L("7. **Work Patterns**: Remote work correlates with higher satisfaction AND compensation across most geographies and roles. The hybrid work model shows intermediate outcomes. Side hustles (full-time employment combined with contracting) are common and associated with higher total compensation.")
+L("7. **Work Patterns**: Remote work is associated with higher average satisfaction and higher median pay than in-person work, with hybrid work in between. These are descriptive correlations (see §4.6, §3.3, and LIMITATIONS.md).")
 L()
 L("---")
 L()
@@ -1057,7 +1169,7 @@ L("- **Build AI-assisted development workflows** — the next generation of deve
 L()
 L("### For Educators & Training Providers")
 L("- **TypeScript and Python should be core curriculum** — they represent both current demand and future growth.")
-L("- **DuckDB and cloud databases deserve curriculum attention** — interest is growing faster than current educational coverage.")
+L("- **Emerging analytical databases (e.g. DuckDB) and cloud databases deserve curriculum attention** — they show strong want/have ratios from a small current base.")
 L("- **Bootcamps and self-directed learning are validated pathways** — the market rewards skill over credentials.")
 L()
 L("### For the Industry")
@@ -1069,7 +1181,7 @@ L("---")
 L()
 L("## Conclusion")
 L()
-L("The 2024 Stack Overflow Developer Survey reveals a developer ecosystem in transition. The technology landscape is being reshaped by the TypeScript revolution, the PostgreSQL ascendancy, and the early but accelerating impact of AI tools. Job satisfaction remains moderate, driven primarily by autonomy and career growth rather than compensation alone. Remote work has cemented its place as a structural feature of the industry, correlating positively with both happiness and earnings.")
+L(f"The 2024 Stack Overflow Developer Survey reveals a developer ecosystem in transition. The technology landscape is being reshaped by the continued dominance of JavaScript, the maturation of TypeScript, the PostgreSQL ascendancy, and the early but accelerating impact of AI tools. Job satisfaction is moderate-to-high on average, and its factor scores are led by **{sat_top}** and **{sat_second}** in this dataset. Remote work has cemented its place as a structural feature of the industry, correlating positively with both satisfaction and earnings.")
 L()
 L("For developers, the message is clear: invest in TypeScript, PostgreSQL, and cloud-native skills; prioritize remote-capable roles; and prepare for AI-assisted development as the new normal. For employers, the data supports investing in developer experience, offering flexible work arrangements, and modernizing technology stacks to attract and retain top talent.")
 L()

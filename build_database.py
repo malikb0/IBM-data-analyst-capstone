@@ -1,32 +1,40 @@
+"""Build a normalised SQLite database from the Stack Overflow 2024 survey CSV.
+
+Usage:
+    python build_database.py [--input CSV] [--output DB]
+
+Defaults preserve the original pipeline paths:
+    --input  survey_data_updated.csv
+    --output survey_cleaned.sqlite
+
+The database layout is unchanged from the original capstone run:
+    respondents                         (1 row per participant)
+    33 per-category technology tables   (11 categories x 3 variants)
+    6 junction tables                   (employment, devtype, learncode,
+                                         coding activities, job satisfaction,
+                                         knowledge self-assessment)
+
+Multi-value (";"-delimited) columns are split into one row per value and
+de-duplicated so that a participant never appears twice for the same value
+(e.g. "Python;Python" yields a single row).
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
 import sqlite3
+import sys
+
 import pandas as pd
-import numpy as np
 
-CSV_PATH = "survey_data_updated.csv"
-DB_PATH = "survey_cleaned.sqlite"
-
-df = pd.read_csv(CSV_PATH)
+# --------------------------------------------------------------------------
+# Cleaning rules (pure, importable, unit-tested in tests/)
+# --------------------------------------------------------------------------
 
 YEARS_CODE_MAP = {"Less than 1 year": 0.5, "More than 50 years": 55}
-def clean_years(val):
-    if pd.isna(val):
-        return None
-    val = str(val).strip()
-    if val in YEARS_CODE_MAP:
-        return YEARS_CODE_MAP[val]
-    try:
-        return float(val)
-    except:
-        return None
 
-df["years_code_clean"] = df["YearsCode"].apply(clean_years)
-df["years_code_pro_clean"] = df["YearsCodePro"].apply(clean_years)
-
-p99 = df["ConvertedCompYearly"].quantile(0.99)
-df["comp_clean"] = df["ConvertedCompYearly"].clip(upper=p99)
-df["comp_clean"] = df["comp_clean"].where(df["ConvertedCompYearly"].notna())
-
-age_map_clean = {
+AGE_MAP = {
     "Under 18 years old": "Under 18",
     "18-24 years old": "18-24",
     "25-34 years old": "25-34",
@@ -36,7 +44,6 @@ age_map_clean = {
     "65 years or older": "65+",
     "Prefer not to say": None,
 }
-df["age_clean"] = df["Age"].map(age_map_clean)
 
 LIKERT_MAP = {
     "Strongly disagree": 1,
@@ -46,33 +53,115 @@ LIKERT_MAP = {
     "Strongly agree": 5,
 }
 
-# 11 category definitions: (csv_prefix, table_suffix)
+# 11 technology categories (CSV prefix == SQLite table prefix) x 3 variants.
 TECH_CATEGORIES = [
-    ("Language", "language"),
-    ("Database", "database"),
-    ("Platform", "platform"),
-    ("Webframe", "webframe"),
-    ("Embedded", "embedded"),
-    ("MiscTech", "misctech"),
-    ("ToolsTech", "toolstech"),
-    ("NEWCollabTools", "collabtools"),
-    ("OfficeStackAsync", "officestackasync"),
-    ("OfficeStackSync", "officestacksync"),
-    ("AISearchDev", "aistack"),
+    "Language",
+    "Database",
+    "Platform",
+    "Webframe",
+    "Embedded",
+    "MiscTech",
+    "ToolsTech",
+    "NEWCollabTools",
+    "OfficeStackAsync",
+    "OfficeStackSync",
+    "AISearchDev",
 ]
 
 VARIANTS = [("HaveWorkedWith", "have"), ("WantToWorkWith", "want"), ("Admired", "admired")]
 
-conn = sqlite3.connect(DB_PATH)
-c = conn.cursor()
+ASPECT_MAP = {
+    "JobSatPoints_1": "career_satisfaction",
+    "JobSatPoints_4": "coworkers",
+    "JobSatPoints_5": "work_life_balance",
+    "JobSatPoints_6": "compensation",
+    "JobSatPoints_7": "resources",
+    "JobSatPoints_8": "autonomy",
+    "JobSatPoints_9": "growth",
+    "JobSatPoints_10": "management",
+    "JobSatPoints_11": "retention",
+}
 
-c.executescript("""
-PRAGMA journal_mode=WAL;
-PRAGMA synchronous=OFF;
-PRAGMA foreign_keys=ON;
-""")
 
-c.execute("""
+def clean_years(val):
+    """Map the survey's sentinel strings to numbers; return None for NaN/blank.
+
+    "Less than 1 year" -> 0.5, "More than 50 years" -> 55, numeric -> float.
+    Anything unparseable (including NaN) -> None.
+    """
+    if pd.isna(val):
+        return None
+    val = str(val).strip()
+    if val in YEARS_CODE_MAP:
+        return YEARS_CODE_MAP[val]
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def split_multi(val):
+    """Split a ';'-delimited cell, stripping whitespace and de-duplicating.
+
+    Order of first appearance is preserved so results are deterministic.
+    Returns an empty list for NaN/blank input.
+    """
+    if pd.isna(val):
+        return []
+    parts = [p.strip() for p in str(val).split(";")]
+    return list(dict.fromkeys(p for p in parts if p))
+
+
+def _clean_str(val):
+    """Return a stripped string, or None for NaN/blank."""
+    if pd.isna(val):
+        return None
+    text = str(val).strip()
+    return text if text else None
+
+
+def _default_input():
+    return os.environ.get("SURVEY_CSV", "survey_data_updated.csv")
+
+
+def _default_output():
+    return os.environ.get("SURVEY_DB", "survey_cleaned.sqlite")
+
+
+RESPONDENT_COLUMNS = [
+    "respondent_id",
+    "main_branch",
+    "age_group",
+    "remote_work",
+    "ed_level",
+    "years_code",
+    "years_code_pro",
+    "org_size",
+    "country",
+    "converted_comp_yearly",
+    "work_exp",
+    "job_sat",
+    "icor_pm",
+    "t_branch",
+    "industry",
+    "os_personal",
+    "os_professional",
+    "so_visit_freq",
+    "so_account",
+    "so_part_freq",
+    "so_comm",
+    "ai_select",
+    "ai_sent",
+    "ai_ben",
+    "ai_acc",
+    "ai_complex",
+    "ai_threat",
+    "ai_ethics",
+    "survey_length",
+    "survey_ease",
+]
+
+_SCHEMA_SQL = """
 CREATE TABLE respondents (
     respondent_id INTEGER PRIMARY KEY,
     main_branch TEXT,
@@ -105,245 +194,312 @@ CREATE TABLE respondents (
     survey_length TEXT,
     survey_ease TEXT
 )
-""")
+"""
 
-# Create all 33 per-category tech tables
-for cat_suffix, _ in TECH_CATEGORIES:
-    for _, var_suffix in VARIANTS:
-        tbl = f"{cat_suffix}_{var_suffix}"
-        c.execute(f"""
-        CREATE TABLE {tbl} (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            respondent_id INTEGER NOT NULL,
-            tech_name TEXT NOT NULL,
-            FOREIGN KEY (respondent_id) REFERENCES respondents(respondent_id)
-        )
-        """)
-
-# Existing junction tables
-c.execute("""
-CREATE TABLE respondent_employment (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    respondent_id INTEGER NOT NULL,
-    employment_type TEXT NOT NULL,
-    FOREIGN KEY (respondent_id) REFERENCES respondents(respondent_id)
-)
-""")
-
-c.execute("""
-CREATE TABLE respondent_devtype (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    respondent_id INTEGER NOT NULL,
-    dev_type TEXT NOT NULL,
-    FOREIGN KEY (respondent_id) REFERENCES respondents(respondent_id)
-)
-""")
-
-c.execute("""
-CREATE TABLE respondent_learn_code (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    respondent_id INTEGER NOT NULL,
-    learning_source TEXT NOT NULL,
-    FOREIGN KEY (respondent_id) REFERENCES respondents(respondent_id)
-)
-""")
-
-c.execute("""
-CREATE TABLE respondent_coding_activities (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    respondent_id INTEGER NOT NULL,
-    activity TEXT NOT NULL,
-    FOREIGN KEY (respondent_id) REFERENCES respondents(respondent_id)
-)
-""")
-
-c.execute("""
-CREATE TABLE job_satisfaction_points (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    respondent_id INTEGER NOT NULL,
-    aspect TEXT NOT NULL,
-    score REAL,
-    FOREIGN KEY (respondent_id) REFERENCES respondents(respondent_id)
-)
-""")
-
-c.execute("""
-CREATE TABLE knowledge_self_assessment (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    respondent_id INTEGER NOT NULL,
-    knowledge_area TEXT NOT NULL,
-    response TEXT,
-    score INTEGER,
-    FOREIGN KEY (respondent_id) REFERENCES respondents(respondent_id)
-)
-""")
-
-ASPECT_MAP = {
-    "JobSatPoints_1": "career_satisfaction",
-    "JobSatPoints_4": "coworkers",
-    "JobSatPoints_5": "work_life_balance",
-    "JobSatPoints_6": "compensation",
-    "JobSatPoints_7": "resources",
-    "JobSatPoints_8": "autonomy",
-    "JobSatPoints_9": "growth",
-    "JobSatPoints_10": "management",
-    "JobSatPoints_11": "retention",
+_JUNCTION_SQL = {
+    "respondent_employment": "employment_type",
+    "respondent_devtype": "dev_type",
+    "respondent_learn_code": "learning_source",
+    "respondent_coding_activities": "activity",
 }
 
-# Pre-build dict of lists per table
-respondent_rows = []
-employment_rows = []
-devtype_rows = []
-learncode_rows = []
-codingact_rows = []
-satpoint_rows = []
-knowledge_rows = []
 
-# For tech tables: dict of table_name -> list of (respondent_id, tech_name)
-tech_rows = {}
-for cat_prefix, _ in TECH_CATEGORIES:
-    for _, var_suffix in VARIANTS:
-        tbl = f"{cat_prefix}_{var_suffix}"
-        tech_rows[tbl] = []
+def _prepare_output(output_db):
+    """Remove a previous database (and WAL sidecars) so the build is idempotent."""
+    for path in (output_db, output_db + "-wal", output_db + "-shm"):
+        if os.path.exists(path):
+            os.remove(path)
+    parent = os.path.dirname(os.path.abspath(output_db))
+    os.makedirs(parent, exist_ok=True)
 
-for idx, row in df.iterrows():
-    rid = int(row["ResponseId"])
 
-    respondent_rows.append((
-        rid,
-        str(row["MainBranch"]) if pd.notna(row["MainBranch"]) else None,
-        row["age_clean"],
-        str(row["RemoteWork"]) if pd.notna(row["RemoteWork"]) else None,
-        str(row["EdLevel"]) if pd.notna(row["EdLevel"]) else None,
-        row["years_code_clean"],
-        row["years_code_pro_clean"],
-        str(row["OrgSize"]) if pd.notna(row["OrgSize"]) else None,
-        str(row["Country"]) if pd.notna(row["Country"]) else None,
-        row["comp_clean"],
-        row["WorkExp"] if pd.notna(row["WorkExp"]) else None,
-        row["JobSat"] if pd.notna(row["JobSat"]) else None,
-        str(row["ICorPM"]) if pd.notna(row["ICorPM"]) else None,
-        str(row["TBranch"]) if pd.notna(row["TBranch"]) else None,
-        str(row["Industry"]) if pd.notna(row["Industry"]) else None,
-        str(row["OpSysPersonal use"]) if pd.notna(row["OpSysPersonal use"]) else None,
-        str(row["OpSysProfessional use"]) if pd.notna(row["OpSysProfessional use"]) else None,
-        str(row["SOVisitFreq"]) if pd.notna(row["SOVisitFreq"]) else None,
-        str(row["SOAccount"]) if pd.notna(row["SOAccount"]) else None,
-        str(row["SOPartFreq"]) if pd.notna(row["SOPartFreq"]) else None,
-        str(row["SOComm"]) if pd.notna(row["SOComm"]) else None,
-        str(row["AISelect"]) if pd.notna(row["AISelect"]) else None,
-        str(row["AISent"]) if pd.notna(row["AISent"]) else None,
-        str(row["AIBen"]) if pd.notna(row["AIBen"]) else None,
-        str(row["AIAcc"]) if pd.notna(row["AIAcc"]) else None,
-        str(row["AIComplex"]) if pd.notna(row["AIComplex"]) else None,
-        str(row["AIThreat"]) if pd.notna(row["AIThreat"]) else None,
-        str(row["AIEthics"]) if pd.notna(row["AIEthics"]) else None,
-        str(row["SurveyLength"]) if pd.notna(row["SurveyLength"]) else None,
-        str(row["SurveyEase"]) if pd.notna(row["SurveyEase"]) else None,
-    ))
+def build(input_csv=_default_input, output_db=_default_output, verbose=True):
+    """Run the ETL. Returns a dict of row counts for verification/tests."""
+    input_csv = input_csv() if callable(input_csv) else input_csv
+    output_db = output_db() if callable(output_db) else output_db
 
-    if pd.notna(row["Employment"]):
-        for emp in str(row["Employment"]).split(";"):
-            emp = emp.strip()
-            if emp:
-                employment_rows.append((rid, emp))
+    if verbose:
+        print(f"Reading {input_csv} ...")
+    df = pd.read_csv(input_csv)
 
-    if pd.notna(row["DevType"]):
-        for dt in str(row["DevType"]).split(";"):
-            dt = dt.strip()
-            if dt:
-                devtype_rows.append((rid, dt))
+    df["years_code_clean"] = df["YearsCode"].apply(clean_years)
+    df["years_code_pro_clean"] = df["YearsCodePro"].apply(clean_years)
 
-    if pd.notna(row["LearnCode"]):
-        for lc in str(row["LearnCode"]).split(";"):
-            lc = lc.strip()
-            if lc:
-                learncode_rows.append((rid, lc))
+    p99 = df["ConvertedCompYearly"].quantile(0.99)
+    df["comp_clean"] = df["ConvertedCompYearly"].clip(upper=p99)
+    df["comp_clean"] = df["comp_clean"].where(df["ConvertedCompYearly"].notna())
 
-    if pd.notna(row["CodingActivities"]):
-        for ca in str(row["CodingActivities"]).split(";"):
-            ca = ca.strip()
-            if ca:
-                codingact_rows.append((rid, ca))
+    # Age mapping: unknown values become NaN (surface them as a warning).
+    mapped_age = df["Age"].map(AGE_MAP)
+    unknown_ages = sorted({str(a) for a in df["Age"].dropna() if a not in AGE_MAP})
+    df["age_clean"] = mapped_age
 
-    # Populate per-category tech tables
-    for cat_prefix, _ in TECH_CATEGORIES:
-        for csv_var, var_suffix in VARIANTS:
-            col = f"{cat_prefix}{csv_var}"
-            val = row.get(col)
+    if verbose:
+        print(f"  compensation p99 cap = {p99:,.0f}")
+        if unknown_ages:
+            print(f"  WARNING: unmapped Age values -> NULL: {unknown_ages}")
+
+    _prepare_output(output_db)
+    conn = sqlite3.connect(output_db)
+    c = conn.cursor()
+    c.executescript(
+        """
+        PRAGMA journal_mode=WAL;
+        PRAGMA synchronous=OFF;
+        PRAGMA foreign_keys=ON;
+        """
+    )
+
+    c.execute(_SCHEMA_SQL)
+
+    # 33 per-category tech tables, named "<CSV prefix>_<variant>".
+    for cat_prefix in TECH_CATEGORIES:
+        for _, var_suffix in VARIANTS:
+            c.execute(
+                f"""
+                CREATE TABLE {cat_prefix}_{var_suffix} (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    respondent_id INTEGER NOT NULL,
+                    tech_name TEXT NOT NULL,
+                    FOREIGN KEY (respondent_id) REFERENCES respondents(respondent_id)
+                )
+                """
+            )
+
+    # Multi-value junction tables.
+    for table, value_col in _JUNCTION_SQL.items():
+        c.execute(
+            f"""
+            CREATE TABLE {table} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                respondent_id INTEGER NOT NULL,
+                {value_col} TEXT NOT NULL,
+                FOREIGN KEY (respondent_id) REFERENCES respondents(respondent_id)
+            )
+            """
+        )
+
+    c.execute(
+        """
+        CREATE TABLE job_satisfaction_points (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            respondent_id INTEGER NOT NULL,
+            aspect TEXT NOT NULL,
+            score REAL,
+            FOREIGN KEY (respondent_id) REFERENCES respondents(respondent_id)
+        )
+        """
+    )
+
+    c.execute(
+        """
+        CREATE TABLE knowledge_self_assessment (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            respondent_id INTEGER NOT NULL,
+            knowledge_area TEXT NOT NULL,
+            response TEXT,
+            score INTEGER,
+            FOREIGN KEY (respondent_id) REFERENCES respondents(respondent_id)
+        )
+        """
+    )
+
+    # ---- collect rows -----------------------------------------------------
+    respondents_rows = []
+    junction_rows = {table: [] for table in _JUNCTION_SQL}
+    tech_rows = {
+        f"{cat_prefix}_{var_suffix}": []
+        for cat_prefix in TECH_CATEGORIES
+        for _, var_suffix in VARIANTS
+    }
+    satpoint_rows = []
+    knowledge_rows = []
+    unmapped_likert = {}
+
+    def _add_unique(rows, seen, key, payload):
+        if key in seen:
+            return
+        seen.add(key)
+        rows.append(payload)
+
+    seen_emp, seen_dev, seen_learn, seen_code = set(), set(), set(), set()
+    seen_tech = {tbl: set() for tbl in tech_rows}
+    seen_sat, seen_know = set(), set()
+
+    for idx, row in df.iterrows():
+        rid = int(row["ResponseId"])
+
+        respondents_rows.append(
+            (
+                rid,
+                _clean_str(row["MainBranch"]),
+                row["age_clean"],
+                _clean_str(row["RemoteWork"]),
+                _clean_str(row["EdLevel"]),
+                row["years_code_clean"],
+                row["years_code_pro_clean"],
+                _clean_str(row["OrgSize"]),
+                _clean_str(row["Country"]),
+                row["comp_clean"],
+                row["WorkExp"] if pd.notna(row["WorkExp"]) else None,
+                row["JobSat"] if pd.notna(row["JobSat"]) else None,
+                _clean_str(row["ICorPM"]),
+                _clean_str(row["TBranch"]),
+                _clean_str(row["Industry"]),
+                _clean_str(row["OpSysPersonal use"]),
+                _clean_str(row["OpSysProfessional use"]),
+                _clean_str(row["SOVisitFreq"]),
+                _clean_str(row["SOAccount"]),
+                _clean_str(row["SOPartFreq"]),
+                _clean_str(row["SOComm"]),
+                _clean_str(row["AISelect"]),
+                _clean_str(row["AISent"]),
+                _clean_str(row["AIBen"]),
+                _clean_str(row["AIAcc"]),
+                _clean_str(row["AIComplex"]),
+                _clean_str(row["AIThreat"]),
+                _clean_str(row["AIEthics"]),
+                _clean_str(row["SurveyLength"]),
+                _clean_str(row["SurveyEase"]),
+            )
+        )
+
+        for value in split_multi(row["Employment"]):
+            _add_unique(junction_rows["respondent_employment"], seen_emp, (rid, value), (rid, value))
+        for value in split_multi(row["DevType"]):
+            _add_unique(junction_rows["respondent_devtype"], seen_dev, (rid, value), (rid, value))
+        for value in split_multi(row["LearnCode"]):
+            _add_unique(junction_rows["respondent_learn_code"], seen_learn, (rid, value), (rid, value))
+        for value in split_multi(row["CodingActivities"]):
+            _add_unique(junction_rows["respondent_coding_activities"], seen_code, (rid, value), (rid, value))
+
+        for cat_prefix in TECH_CATEGORIES:
+            for csv_var, var_suffix in VARIANTS:
+                col = f"{cat_prefix}{csv_var}"
+                if col not in df.columns:
+                    continue
+                table = f"{cat_prefix}_{var_suffix}"
+                for tech_item in split_multi(row[col]):
+                    _add_unique(tech_rows[table], seen_tech[table], (rid, tech_item), (rid, tech_item))
+
+        for col, aspect in ASPECT_MAP.items():
+            if col in df.columns and pd.notna(row[col]):
+                _add_unique(satpoint_rows, seen_sat, (rid, aspect), (rid, aspect, float(row[col])))
+
+        for k in range(1, 10):
+            col = f"Knowledge_{k}"
+            if col not in df.columns:
+                continue
+            val = row[col]
             if pd.notna(val):
-                tbl = f"{cat_prefix}_{var_suffix}"
-                for tech_item in str(val).split(";"):
-                    tech_item = tech_item.strip()
-                    if tech_item:
-                        tech_rows[tbl].append((rid, tech_item))
+                val_str = str(val).strip()
+                score = LIKERT_MAP.get(val_str)
+                if val_str not in LIKERT_MAP:
+                    unmapped_likert[val_str] = unmapped_likert.get(val_str, 0) + 1
+                _add_unique(knowledge_rows, seen_know, (rid, col), (rid, col, val_str, score))
 
-    for col, aspect in ASPECT_MAP.items():
-        val = row.get(col)
-        if pd.notna(val):
-            satpoint_rows.append((rid, aspect, float(val)))
+        if verbose and (idx + 1) % 2000 == 0:
+            print(f"  Processed {idx + 1}/{len(df)} rows...")
 
-    for k in range(1, 10):
-        col = f"Knowledge_{k}"
-        val = row.get(col)
-        if pd.notna(val):
-            val_str = str(val).strip()
-            score = LIKERT_MAP.get(val_str, None)
-            knowledge_rows.append((rid, col, val_str, score))
+    if unmapped_likert:
+        print(
+            "  WARNING: unmapped Likert responses stored with score=NULL: "
+            + ", ".join(f"{k!r} (x{v})" for k, v in sorted(unmapped_likert.items())),
+            file=sys.stderr,
+        )
 
-    if (idx + 1) % 2000 == 0:
-        print(f"  Processed {idx+1}/{len(df)} rows...")
+    # ---- insert -----------------------------------------------------------
+    placeholders = ",".join(["?"] * len(RESPONDENT_COLUMNS))
+    if verbose:
+        print(f"Inserting {len(respondents_rows)} respondents...")
+    c.executemany(
+        f"INSERT INTO respondents ({','.join(RESPONDENT_COLUMNS)}) VALUES ({placeholders})",
+        respondents_rows,
+    )
+    for table, value_col in _JUNCTION_SQL.items():
+        rows = junction_rows[table]
+        if verbose:
+            print(f"Inserting {len(rows)} rows into {table}...")
+        if rows:
+            c.executemany(
+                f"INSERT INTO {table} (respondent_id, {value_col}) VALUES (?,?)", rows
+            )
+    for table, rows in tech_rows.items():
+        if verbose:
+            print(f"Inserting {len(rows)} rows into {table}...")
+        if rows:
+            c.executemany(
+                f"INSERT INTO {table} (respondent_id, tech_name) VALUES (?,?)", rows
+            )
+    if verbose:
+        print(f"Inserting {len(satpoint_rows)} satisfaction point rows...")
+    if satpoint_rows:
+        c.executemany(
+            "INSERT INTO job_satisfaction_points (respondent_id, aspect, score) VALUES (?,?,?)",
+            satpoint_rows,
+        )
+    if verbose:
+        print(f"Inserting {len(knowledge_rows)} knowledge assessment rows...")
+    if knowledge_rows:
+        c.executemany(
+            "INSERT INTO knowledge_self_assessment "
+            "(respondent_id, knowledge_area, response, score) VALUES (?,?,?,?)",
+            knowledge_rows,
+        )
 
-print(f"\nInserting {len(respondent_rows)} respondents...")
-c.executemany("INSERT INTO respondents VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", respondent_rows)
+    # ---- indexes ----------------------------------------------------------
+    if verbose:
+        print("Creating indexes...")
+    indexes = [
+        "CREATE INDEX idx_respondents_country ON respondents(country)",
+        "CREATE INDEX idx_respondents_age ON respondents(age_group)",
+        "CREATE INDEX idx_respondents_remote ON respondents(remote_work)",
+        "CREATE INDEX idx_respondents_comp ON respondents(converted_comp_yearly)",
+        "CREATE INDEX idx_respondents_jobsat ON respondents(job_sat)",
+        "CREATE INDEX idx_emp_rid ON respondent_employment(respondent_id)",
+        "CREATE INDEX idx_devtype_rid ON respondent_devtype(respondent_id)",
+        "CREATE INDEX idx_learn_rid ON respondent_learn_code(respondent_id)",
+        "CREATE INDEX idx_coding_rid ON respondent_coding_activities(respondent_id)",
+        "CREATE INDEX idx_satpoint_rid ON job_satisfaction_points(respondent_id)",
+        "CREATE INDEX idx_knowledge_rid ON knowledge_self_assessment(respondent_id)",
+    ]
+    for tbl_name in sorted(tech_rows.keys()):
+        indexes.append(f"CREATE INDEX idx_{tbl_name}_rid ON {tbl_name}(respondent_id)")
+        indexes.append(f"CREATE INDEX idx_{tbl_name}_tech ON {tbl_name}(tech_name)")
+    for idx_sql in indexes:
+        c.execute(idx_sql)
 
-print(f"Inserting {len(employment_rows)} employment rows...")
-c.executemany("INSERT INTO respondent_employment (respondent_id, employment_type) VALUES (?,?)", employment_rows)
+    conn.commit()
+    c.execute("ANALYZE")
+    conn.close()
 
-print(f"Inserting {len(devtype_rows)} devtype rows...")
-c.executemany("INSERT INTO respondent_devtype (respondent_id, dev_type) VALUES (?,?)", devtype_rows)
+    counts = {
+        "respondents": len(respondents_rows),
+        "tech_rows": sum(len(v) for v in tech_rows.values()),
+        "tables": 1 + len(tech_rows) + len(_JUNCTION_SQL) + 2,
+    }
+    if verbose:
+        print(f"\nDatabase created successfully: {output_db}")
+        print(
+            f"Tables: respondents + {len(tech_rows)} per-category tech tables "
+            f"(11 categories x 3 variants) + {len(_JUNCTION_SQL) + 2} junction tables "
+            f"= {counts['tables']} tables total"
+        )
+    return counts
 
-print(f"Inserting {len(learncode_rows)} learncode rows...")
-c.executemany("INSERT INTO respondent_learn_code (respondent_id, learning_source) VALUES (?,?)", learncode_rows)
 
-print(f"Inserting {len(codingact_rows)} coding activity rows...")
-c.executemany("INSERT INTO respondent_coding_activities (respondent_id, activity) VALUES (?,?)", codingact_rows)
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--input", default=_default_input(), help="survey CSV path")
+    parser.add_argument("--output", default=_default_output(), help="output SQLite path")
+    parser.add_argument("-q", "--quiet", action="store_true", help="suppress progress output")
+    args = parser.parse_args(argv)
 
-for tbl, rows in tech_rows.items():
-    if rows:
-        print(f"  Inserting {len(rows)} rows into {tbl}...")
-        c.executemany(f"INSERT INTO {tbl} (respondent_id, tech_name) VALUES (?,?)", rows)
+    if not os.path.exists(args.input):
+        parser.error(f"input CSV not found: {args.input}")
+    build(args.input, args.output, verbose=not args.quiet)
+    return 0
 
-print(f"Inserting {len(satpoint_rows)} satisfaction point rows...")
-c.executemany("INSERT INTO job_satisfaction_points (respondent_id, aspect, score) VALUES (?,?,?)", satpoint_rows)
 
-print(f"Inserting {len(knowledge_rows)} knowledge assessment rows...")
-c.executemany("INSERT INTO knowledge_self_assessment (respondent_id, knowledge_area, response, score) VALUES (?,?,?,?)", knowledge_rows)
-
-print("Creating indexes...")
-indexes = [
-    "CREATE INDEX idx_respondents_country ON respondents(country)",
-    "CREATE INDEX idx_respondents_age ON respondents(age_group)",
-    "CREATE INDEX idx_respondents_remote ON respondents(remote_work)",
-    "CREATE INDEX idx_respondents_comp ON respondents(converted_comp_yearly)",
-    "CREATE INDEX idx_respondents_jobsat ON respondents(job_sat)",
-    "CREATE INDEX idx_emp_rid ON respondent_employment(respondent_id)",
-    "CREATE INDEX idx_devtype_rid ON respondent_devtype(respondent_id)",
-    "CREATE INDEX idx_learn_rid ON respondent_learn_code(respondent_id)",
-    "CREATE INDEX idx_coding_rid ON respondent_coding_activities(respondent_id)",
-    "CREATE INDEX idx_satpoint_rid ON job_satisfaction_points(respondent_id)",
-    "CREATE INDEX idx_knowledge_rid ON knowledge_self_assessment(respondent_id)",
-]
-for tbl_name in sorted(tech_rows.keys()):
-    indexes.append(f"CREATE INDEX idx_{tbl_name}_rid ON {tbl_name}(respondent_id)")
-    indexes.append(f"CREATE INDEX idx_{tbl_name}_tech ON {tbl_name}(tech_name)")
-
-for idx_sql in indexes:
-    c.execute(idx_sql)
-
-conn.commit()
-c.execute("ANALYZE")
-conn.close()
-
-print("\nDatabase created successfully: survey_cleaned.sqlite")
-print("Tables: respondents, 33 per-category tech tables (11 categories × 3 variants) + 6 junction tables")
+if __name__ == "__main__":
+    raise SystemExit(main())
