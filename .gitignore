@@ -10,3 +10,37 @@ survey-data.csv
 *.xlsx
 *.png
 *.pptx
+
+# --- portfolio-polish additions ---
+# local virtualenvs (never commit; OS-specific)
+.venv/
+.venv-data-analysis/
+
+# orchestrator-private working files (brief, recon, reports)
+.orchestrator/
+
+# generated / fetched data (keep the committed sample via negation)
+data/raw/
+demo.sqlite
+output_demo/
+!data/sample/*.csv
+
+# Python + tooling cruft
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# OS / Office locks
+~$*
+.DS_Store
+
+# SQLite WAL sidecars from a running/interrupted build
+*.sqlite-wal
+*.sqlite-shm
+demo.sqlite-*
+
+# nbtool backup store (if used locally)
+.nbtool/
+
+# Keep README screenshots committed (negate the blanket *.png above)
+!docs/images/*.png
