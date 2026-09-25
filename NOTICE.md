@@ -1,27 +1,40 @@
 # NOTICE — Attribution, Provenance & Safety
 
-This repository is a personal data-analysis portfolio project. It contains work of
+This repository is a personal data-analysis portfolio project. It combines work of
 several origins, listed below. **Nothing here is affiliated with, sponsored by, or
 endorsed by any third party unless explicitly stated.**
 
+> **In short:** the code, pipeline, tests and prose are the owner's own work (MIT).
+> The `labs/` notebooks are completed IBM/Coursera coursework (attributed, *not* MIT).
+> The dataset is Stack Overflow's 2024 survey (ODbL, *not* MIT).
+
+## Contents
+
+1. [Original work (repository owner)](#1-original-work-repository-owner)
+2. [Course material (IBM / Coursera)](#2-course-material-ibm--coursera)
+3. [Third-party assets](#3-third-party-assets)
+4. [Dataset — Stack Overflow Developer Survey 2024](#4-dataset--stack-overflow-developer-survey-2024)
+5. [Data provenance & integrity](#5-data-provenance--integrity)
+6. [Security statement](#6-security-statement)
+7. [License scope](#7-license-scope)
+
 ## 1. Original work (repository owner)
 
-The following was written by the repository owner:
-
-- **Data pipeline** — `build_database.py`: reads the survey CSV, applies the cleaning
-  rules described in [METHODOLOGY.md](METHODOLOGY.md), and writes a normalised SQLite
-  database.
-- **Report generator** — `generate_report.py`: queries that database and produces the
-  charts and the Markdown analysis report under `output/`.
-- **Documentation** — `README.md`, `METHODOLOGY.md`, `DATA_DICTIONARY.md`,
-  `LIMITATIONS.md`, `RESULTS.md`, this file, and the generated report prose.
-- **Tests and scripts** — `tests/`, `scripts/`, `Makefile`.
+| Area | Location |
+|---|---|
+| Data pipeline | [`src/build_database.py`](src/build_database.py) |
+| Report generator | [`src/generate_report.py`](src/generate_report.py) |
+| Query helper | [`src/query.py`](src/query.py) |
+| Data fetch script | [`scripts/fetch_data.sh`](scripts/fetch_data.sh) |
+| Documentation | [`README.md`](README.md), [`docs/`](docs/), this file |
+| Tests | [`tests/`](tests/) |
+| Build/automation | [`Makefile`](Makefile) |
 
 These are released under the MIT terms in [LICENSE](LICENSE).
 
 ## 2. Course material (IBM / Coursera)
 
-The `*.ipynb` lab notebooks in this repository were completed as part of the
+The `*.ipynb` lab notebooks under [`labs/notebooks/`](labs/notebooks/) were completed as part of the
 **IBM Data Analyst Professional Certificate** on Coursera. The lab instructions, starter
 notebook templates, and the datasets supplied with the course are the property of IBM
 and are included here as a record of completed coursework.
@@ -38,11 +51,11 @@ and are included here as a record of completed coursework.
 
 | Asset | Origin | Handling |
 |---|---|---|
-| `*.ipynb` lab notebooks (24 files) | IBM Data Analyst Professional Certificate (Coursera) | Published as completed coursework; attributed here; excluded from MIT. |
-| `Data Analyst Capstone Template 2026.pptx` | IBM/Coursera capstone template | Third-party template, **unused**. Proposed for removal (see README/.gitignore). Not presented as original work. |
-| `Data Analyst Capstone Project Report.pdf` | Generated from this owner's analysis | Owner's report export. Not covered by course material. |
-| `astros.json` | Public NASA APOD API response (sample payload) | Public sample data used in an API lesson. Not sensitive. |
-| `job-postings.xlsx`, `popular-languages.csv` | Public sample datasets used in course labs | Public samples; retained for lab provenance. |
+| [`labs/notebooks/*.ipynb`](labs/notebooks/) (26 files) | IBM Data Analyst Professional Certificate (Coursera) | Published as completed coursework; attributed here; excluded from MIT. |
+| `Data Analyst Capstone Template 2026.pptx` | IBM/Coursera capstone template | Third-party template, **unused**, and git-ignored. Not presented as original work. |
+| [`docs/capstone-report.pdf`](docs/capstone-report.pdf) | Generated from this owner's analysis | Owner's report export. Covered by MIT. |
+| `labs/data/astros.json` | Public NASA APOD API response (sample payload) | Public sample data used in an API lesson. Not sensitive. |
+| `labs/data/job-postings.xlsx`, `labs/data/popular-languages.csv` | Public sample datasets used in course labs | Public samples; retained for lab provenance. |
 
 No logos, trademarks, or brand styling are claimed or redistributed as this project's
 own identity. The project title references the course factually only.
@@ -64,7 +77,7 @@ own identity. The project title references the course factually only.
 - The pipeline is deterministic: same input CSV → same database contents.
 - `make demo` runs end-to-end on the committed subset with no network access.
 - A full run requires `make fetch-data` (which verifies the download size) followed by
-  `make build-db && make report`. See [METHODOLOGY.md](METHODOLOGY.md) §5.
+  `make build-db && make report`. See [docs/methodology.md](docs/methodology.md) §5.
 - The raw download is not tracked by git; only the small subset under `data/sample/` is.
 
 ## 6. Security statement

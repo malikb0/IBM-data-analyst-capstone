@@ -1,11 +1,11 @@
 # Survey Data Analysis Report
 
 > **Generated artifact — do not edit by hand.** This report and the charts in this
-> directory are produced by `generate_report.py` from the SQLite database
+> directory are produced by `src/generate_report.py` from the SQLite database
 > `survey_cleaned.sqlite`.
 >
 > - **Dataset:** Stack Overflow Developer Survey 2024 (ODbL). See `NOTICE.md`.
-> - **Pipeline:** `build_database.py` → `generate_report.py` (see `METHODOLOGY.md`).
+> - **Pipeline:** `src/build_database.py` → `src/generate_report.py` (see `docs/methodology.md`).
 > - **Regenerate:** `make demo` (offline sample) or
 >   `make fetch-data && make build-db && make report` (full run).
 >
@@ -15,7 +15,7 @@
 
 ## Executive Summary
 
-This report analyses the Stack Overflow 2024 Developer Survey, covering 18,845 respondents from 161 countries and territories. The pipeline cleans and normalises the survey into a relational SQLite model (40 tables), then derives the charts and findings below. The analysis covers technology trends, job satisfaction, compensation, geography, age, and AI tooling. Headline patterns: JavaScript remains the most widely used language, TypeScript and Rust show the strongest forward-looking demand, PostgreSQL leads databases, remote work correlates with higher satisfaction and pay, and AI tools are already part of many developers' workflows. All findings are descriptive and correlational (see the Discussion and `LIMITATIONS.md`).
+This report analyses the Stack Overflow 2024 Developer Survey, covering 18,845 respondents from 161 countries and territories. The pipeline cleans and normalises the survey into a relational SQLite model (40 tables), then derives the charts and findings below. The analysis covers technology trends, job satisfaction, compensation, geography, age, and AI tooling. Headline patterns: JavaScript remains the most widely used language, TypeScript and Rust show the strongest forward-looking demand, PostgreSQL leads databases, remote work correlates with higher satisfaction and pay, and AI tools are already part of many developers' workflows. All findings are descriptive and correlational (see the Discussion and `docs/limitations.md`).
 
 ## 1. Data Overview & Database Schema
 
@@ -454,7 +454,7 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 #### Currently Used Languages
 
-![Languages Currently Used](chart_lang_current.png)
+![Languages Currently Used](charts/chart_lang_current.png)
 
 **Data Context:** Based on 116,557 responses from 18,845 total respondents. Each respondent could select multiple languages. Chart shows the top 10 languages by raw count of respondents who reported using them. No outlier removal applied — all valid responses included.
 
@@ -475,7 +475,7 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 #### Wanted Languages
 
-![Languages Desired](chart_lang_wanted.png)
+![Languages Desired](charts/chart_lang_wanted.png)
 
 **Data Context:** Based on 106,356 responses from 18,845 total respondents. Chart shows the top 10 languages respondents expressed desire to work with. Want/have ratios are calculated as: (respondents who want the language) / (respondents who currently use it). Percentages shown are of all respondents.
 
@@ -497,7 +497,7 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 #### Currently Used Databases
 
-![Databases Currently Used](chart_db_current.png)
+![Databases Currently Used](charts/chart_db_current.png)
 
 **Data Context:** Based on 69,586 responses from 18,845 total respondents. Chart shows the top 10 databases by raw adoption count. No data cleaning applied beyond the standard ConvertedCompYearly cap at the 99th percentile.
 
@@ -516,7 +516,7 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 #### Wanted Databases
 
-![Databases Desired](chart_db_wanted.png)
+![Databases Desired](charts/chart_db_wanted.png)
 
 **Data Context:** Based on 65,913 responses. Percentages are of all 18,845 respondents. The 'want ratio' compares desired vs current usage to identify growth trends.
 
@@ -537,19 +537,19 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 ### 2.3 Cloud Platforms
 
-![Platform Trends](chart_platform_trends.png)
+![Platform Trends](charts/chart_platform_trends.png)
 
 **Data Context:** Based on 50,655 current-use responses and 48,410 desired responses. Chart shows the top 10 platforms by current usage count, overlaid with the corresponding desire counts. No data filtering applied beyond the standard cleaning pipeline.
 
 ### 2.4 Rising Stars (Want/Have Ratio > 1.5)
 
-![Rising Stars](chart_rising_stars.png)
+![Rising Stars](charts/chart_rising_stars.png)
 
 **Data Context:** Computed from all 18,845 respondents across all 11 technology categories. The want/have ratio is calculated as: (respondents who want the technology) / (respondents who currently use it). Only technologies with at least 30 current users are included to ensure statistical relevance. A ratio > 1.5 indicates strong demand relative to current supply — signaling growth opportunities.
 
 ### 2.5 Declining Technologies (Want/Have Ratio < 0.7)
 
-![Declining Tech](chart_declining_tech.png)
+![Declining Tech](charts/chart_declining_tech.png)
 
 **Data Context:** Same methodology as Rising Stars above. A ratio < 0.7 indicates weaker demand relative to current usage, suggesting the technology is losing relevance. Technologies with fewer than 30 current users are excluded.
 
@@ -557,7 +557,7 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 ### 3.1 Overall Distribution
 
-![Job Satisfaction Distribution](chart_jobsat_dist.png)
+![Job Satisfaction Distribution](charts/chart_jobsat_dist.png)
 
 **Data Context:** Based on 12,111 respondents who provided a job satisfaction score (0-10 scale). 6,734 respondents (35.7%) did not answer this question and are excluded. No outlier removal — satisfaction scores are ordinal by design.
 
@@ -567,37 +567,37 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 ### 3.2 What Makes Developers Satisfied?
 
-![Satisfaction Factors](chart_jobsat_factors.png)
+![Satisfaction Factors](charts/chart_jobsat_factors.png)
 
 **Data Context:** Based on 109,584 individual satisfaction-aspect ratings across 9 aspects (career satisfaction, coworkers, work-life balance, compensation, resources, autonomy, growth, management, retention). Each aspect is scored 0-100. Chart shows the average score per aspect. Respondents could rate multiple aspects.
 
 ### 3.3 Satisfaction by Work Arrangement
 
-![Satisfaction by Remote](chart_jobsat_remote.png)
+![Satisfaction by Remote](charts/chart_jobsat_remote.png)
 
 **Data Context:** Based on 12,108 respondents who reported both job satisfaction and remote work status. Chart shows the average satisfaction (0-10) for each work arrangement category. Remote workers, hybrid workers, and in-person workers are compared directly — no filtering or normalization applied.
 
 ### 3.4 Satisfaction by Developer Role
 
-![Satisfaction by Dev Type](chart_jobsat_devtype.png)
+![Satisfaction by Dev Type](charts/chart_jobsat_devtype.png)
 
 **Data Context:** Based on 18,801 developer role assignments across 18,845 respondents (multi-select). Only roles with 50+ respondents are included to ensure statistical significance. Chart shows the top 10 roles by average satisfaction.
 
 ### 3.5 Satisfaction by Country
 
-![Satisfaction by Country](chart_jobsat_country.png)
+![Satisfaction by Country](charts/chart_jobsat_country.png)
 
 **Data Context:** Based on respondents with both country and satisfaction data. Only countries with 50+ respondents are included. Chart shows the top 10 countries by average job satisfaction. Smaller countries are excluded to avoid sampling bias.
 
 ### 3.6 Satisfaction by Age Group
 
-![Satisfaction by Age](chart_jobsat_age.png)
+![Satisfaction by Age](charts/chart_jobsat_age.png)
 
 **Data Context:** Based on 12,095 respondents. Age groups follow the standard Stack Overflow survey categories. The 'Prefer not to say' group is excluded. Chart shows the line trend across age brackets — no smoothing applied.
 
 ### 3.7 Individual Contributor vs Manager
 
-![IC vs Manager](chart_jobsat_icpm.png)
+![IC vs Manager](charts/chart_jobsat_icpm.png)
 
 **Data Context:** Based on respondents who identified as either Individual Contributor (IC) or People Manager. Chart compares average satisfaction between the two groups. All valid responses included — no minimum count threshold.
 
@@ -605,7 +605,7 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 ### 4.1 Overall Distribution
 
-![Compensation Distribution](chart_comp_dist.png)
+![Compensation Distribution](charts/chart_comp_dist.png)
 
 **Data Context:** Based on 9,550 respondents (9,295 missing, 49.3% of total). Compensation is capped at the 99th percentile ($378,512) to handle extreme outliers; values above the cap are clipped to it.
 
@@ -615,43 +615,43 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 ### 4.2 Median Compensation by Country
 
-![Compensation by Country](chart_comp_country.png)
+![Compensation by Country](charts/chart_comp_country.png)
 
 **Data Context:** Based on respondents with non-null compensation and country. Only countries with 30+ respondents are included. Chart shows the top 10 countries by median compensation. Compensation is capped at the 99th percentile as described above.
 
 ### 4.3 Median Compensation by Developer Role
 
-![Compensation by Dev Type](chart_comp_devtype.png)
+![Compensation by Dev Type](charts/chart_comp_devtype.png)
 
 **Data Context:** Based on 18,801 developer role assignments with non-null compensation. Only roles with 50+ respondents are included. Chart shows the top 10 roles by median compensation. Multi-role respondents are counted in each role they selected.
 
 ### 4.4 Median Compensation by Education Level
 
-![Compensation by Education](chart_comp_edlevel.png)
+![Compensation by Education](charts/chart_comp_edlevel.png)
 
 **Data Context:** Based on respondents with non-null compensation and education level. All education levels meeting the minimum threshold are shown, sorted by median compensation descending. No minimum count filter applied due to the smaller number of distinct categories.
 
 ### 4.5 Median Compensation by Age Group
 
-![Compensation by Age](chart_comp_age.png)
+![Compensation by Age](charts/chart_comp_age.png)
 
 **Data Context:** Based on respondents with non-null compensation and age group. Age groups sorted in natural order. The 'Prefer not to say' group excluded. Compensation shown as median to reduce skew effects within each age bracket.
 
 ### 4.6 Median Compensation by Work Arrangement
 
-![Compensation by Remote](chart_comp_remote.png)
+![Compensation by Remote](charts/chart_comp_remote.png)
 
 **Data Context:** Based on respondents with non-null compensation and remote work status. Chart shows median compensation (not mean) to reduce the impact of compensation outliers within each work arrangement category.
 
 ### 4.7 Experience vs Compensation by Age Group
 
-![Experience vs Comp](chart_comp_exp_age.png)
+![Experience vs Comp](charts/chart_comp_exp_age.png)
 
 **Data Context:** Based on respondents with non-null professional years of coding and compensation. Compensation filtered to exclude values above $500K for visual clarity (extreme outliers removed). Each point represents one respondent. Color-coded by age group to reveal age-related experience-compensation patterns. Alpha blending (0.3) used to show density. Total points shown: 9,528.
 
 ### 4.8 Dev Role: Compensation vs Satisfaction
 
-![Dev Role Comp vs Sat](chart_devtype_comp_sat.png)
+![Dev Role Comp vs Sat](charts/chart_devtype_comp_sat.png)
 
 **Data Context:** Based on 18,801 developer role assignments with both non-null compensation and satisfaction. Roles with fewer than 30 respondents are excluded. Bubble size reflects the number of respondents in each role. Axes show average compensation and average satisfaction per role.
 
@@ -659,7 +659,7 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 ### 5.1 Top 10 Countries × Top 10 Languages (Adoption %)
 
-![Geographic Heatmap](chart_geo_heatmap.png)
+![Geographic Heatmap](charts/chart_geo_heatmap.png)
 
 **Data Context:** Based on 18,845 respondents across the top 10 countries by respondent count. Shows the adoption rate (%) of the top 10 programming languages within each country. Percentages are calculated as: (respondents in country C who use language L) / (total respondents in country C). Values range from 0% to 100% across the heatmap. Darker red indicates higher adoption.
 
@@ -667,7 +667,7 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 ### 6.1 Language Adoption Across Age Groups
 
-![Age Language Stacked](chart_age_lang_stacked.png)
+![Age Language Stacked](charts/chart_age_lang_stacked.png)
 
 **Data Context:** Based on 18,845 respondents across 7 age brackets. Shows the stacked percentage of the top 8 programming languages used within each age group. Percentages are stacked within each age group to sum to 100% (representing the proportion of all language mentions). The 'Prefer not to say' age group is excluded. Each age bar represents the distribution of language mentions by respondents in that bracket.
 
@@ -675,73 +675,73 @@ Note: The diagram shows representative tables for brevity. The full schema inclu
 
 ### 7.1 Remote Work Adoption by Developer Role
 
-![Remote by Dev Type](chart_remote_devtype.png)
+![Remote by Dev Type](charts/chart_remote_devtype.png)
 
 **Data Context:** Based on 18,801 developer role assignments with non-null remote work status. Chart shows the top 10 developer roles by remote work adoption percentage. Only roles with 50+ total respondents are included. Percentage = (respondents in role who work remotely) / (total respondents in role).
 
 ### 7.2 AI Sentiment & Age Group Patterns
 
-![AI Sentiment](chart_ai_sentiment.png)
+![AI Sentiment](charts/chart_ai_sentiment.png)
 
 **Data Context:** Based on 15,396 respondents who provided AI sentiment data. Pie chart shows the distribution of self-reported attitudes toward AI tools. The top 7 sentiment categories are shown individually; all remaining categories are grouped into 'Other'. Percentages sum to 100%.
 
-![AI by Age Group](chart_ai_age.png)
+![AI by Age Group](charts/chart_ai_age.png)
 
 **Data Context:** Based on 18,763 respondents who reported both AI tool selection and age group. Stacked bar chart shows the distribution of the top 5 AI tools selected within each age bracket. Percentages sum to 100% per age group. The 'Prefer not to say' age group is excluded.
 
 ### 7.3 Knowledge Self-Assessment
 
-![Knowledge Scores](chart_knowledge.png)
+![Knowledge Scores](charts/chart_knowledge.png)
 
 **Data Context:** Based on 105,015 self-assessment ratings across 9 knowledge areas. Scores use a Likert scale: 1 (Strongly disagree) to 5 (Strongly agree). Chart shows the average score per knowledge area. All valid responses included — no filtering applied.
 
-![Knowledge Correlations](chart_knowledge_corr.png)
+![Knowledge Correlations](charts/chart_knowledge_corr.png)
 
 **Data Context:** Based on the subset of respondents with non-null knowledge scores, job satisfaction, and compensation. Bar chart shows the Pearson correlation between each knowledge area score and (a) job satisfaction, (b) compensation. Positive values indicate that higher self-assessed knowledge correlates with higher satisfaction/compensation.
 
 ### 7.4 Learning Pathways and Compensation
 
-![Learning Compensation](chart_learn_comp.png)
+![Learning Compensation](charts/chart_learn_comp.png)
 
 **Data Context:** Based on 65,255 learning source responses from respondents with non-null compensation. Only learning sources with 50+ respondents are included. Chart shows median compensation (not mean) to reduce skew from high earners within each learning pathway. Respondents could select multiple learning sources.
 
 ### 7.5 Compensation by Employment Type
 
-![Employment Compensation](chart_emp_comp.png)
+![Employment Compensation](charts/chart_emp_comp.png)
 
 **Data Context:** Based on respondents with non-null compensation and employment type. Only employment types with 100+ respondents are included. Chart shows the top 10 employment types by average compensation. Respondents could select multiple employment types.
 
 ### 7.6 Technology Migration: What Python Devs Want Next
 
-![Python Migration](chart_python_migration.png)
+![Python Migration](charts/chart_python_migration.png)
 
 **Data Context:** Based on 9,590 respondents who currently use Python. Chart shows the top 10 languages these Python developers want to learn next. Python itself is excluded from the results. Raw counts represent the number of Python users who also expressed desire for each target language.
 
 ### 7.7 Work Arrangement × Compensation × Satisfaction Matrix
 
-![Remote Comp Sat Matrix](chart_remote_comp_sat_matrix.png)
+![Remote Comp Sat Matrix](charts/chart_remote_comp_sat_matrix.png)
 
 **Data Context:** Based on 6,872 respondents with non-null compensation, satisfaction, and remote work status. Compensation is bucketed into 4 tiers: Low (<$30K), Medium-Low ($30-70K), Medium-High ($70-120K), High (>$120K). Cell values show average job satisfaction (0-10 scale). Color scale: Green = higher satisfaction, Red = lower satisfaction (range 5-8).
 
 ### 7.8 Country × Remote Work × Compensation
 
-![Country Remote Comp](chart_country_remote_comp.png)
+![Country Remote Comp](charts/chart_country_remote_comp.png)
 
 **Data Context:** Based on respondents from the top 10 countries by remote worker count. Only respondents with non-null compensation and remote work status are included. Bars show median compensation for remote vs in-person workers within each country. Countries sorted by remote worker median compensation.
 
 ### 7.9 Stack Overflow Engagement Patterns
 
-![SO Visit Frequency](chart_so_visit.png)
+![SO Visit Frequency](charts/chart_so_visit.png)
 
 **Data Context:** Based on all 18,845 respondents with non-null Stack Overflow visit frequency. Chart shows the distribution of visit frequencies. Categories are ordered from most to least frequent. No filtering applied.
 
-![SO Participation Compensation](chart_so_comp.png)
+![SO Participation Compensation](charts/chart_so_comp.png)
 
 **Data Context:** Based on respondents with non-null compensation and SO participation frequency. Only frequency categories with 50+ respondents are included. Chart shows average compensation by participation level. Results should be interpreted as correlational, not causal.
 
 ### 7.10 Employment Type Distribution
 
-![Employment Distribution](chart_employment_dist.png)
+![Employment Distribution](charts/chart_employment_dist.png)
 
 **Data Context:** Based on 23,267 employment type responses from 18,845 respondents (multi-select). Chart shows the top 10 most common employment types by raw count. Each respondent could select multiple employment types.
 
@@ -757,7 +757,7 @@ Rust and Go represent the most significant 'adoption gap' opportunities: relativ
 PostgreSQL's lead over MySQL in both current and desired usage confirms a long-anticipated tipping point. MySQL, once the default open-source relational database, now has a lower want share than current use. Emerging analytical/NewSQL databases such as DuckDB show high want/have ratios from a small base — interest worth watching rather than current dominance.
 
 ### Job Satisfaction
-The mean satisfaction score of approximately 7.1/10 suggests moderate-to-high overall satisfaction. Among the individual satisfaction factors, **compensation** and **resources** score highest on average, while **coworkers** scores lowest. (See METHODOLOGY.md for how the factor scores are derived.)
+The mean satisfaction score of approximately 7.1/10 suggests moderate-to-high overall satisfaction. Among the individual satisfaction factors, **compensation** and **resources** score highest on average, while **coworkers** scores lowest. (See docs/methodology.md for how the factor scores are derived.)
 
 Remote workers report higher average satisfaction than in-person workers, with hybrid workers in between. In this dataset, average satisfaction rises with age across the reported brackets (though the oldest brackets have small sample sizes). See the satisfaction-by-age chart for the exact shape rather than assuming a mid-career peak.
 
@@ -788,7 +788,7 @@ Several limitations should be noted. The survey is self-selected and may over-re
 
 6. **AI & Learning**: AI sentiment in this dataset is broadly favourable — favorable and very-favorable responses far outnumber unfavorable ones. Median compensation varies by learning source; see the learning-pathway chart rather than assuming a single ranking.
 
-7. **Work Patterns**: Remote work is associated with higher average satisfaction and higher median pay than in-person work, with hybrid work in between. These are descriptive correlations (see §4.6, §3.3, and LIMITATIONS.md).
+7. **Work Patterns**: Remote work is associated with higher average satisfaction and higher median pay than in-person work, with hybrid work in between. These are descriptive correlations (see §4.6, §3.3, and docs/limitations.md).
 
 ---
 

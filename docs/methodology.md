@@ -1,9 +1,30 @@
 # Methodology — Data Cleaning & Normalisation
 
 This document describes how the Stack Overflow 2024 Developer Survey was turned into the
-analysis database. Every rule here is implemented in `build_database.py`; the report and
-chart logic lives in `generate_report.py`. Numbers quoted below come from the canonical
+analysis database. Every rule here is implemented in `src/build_database.py`; the report and
+chart logic lives in `src/generate_report.py`. Numbers quoted below come from the canonical
 run (`18,845` respondents).
+
+## Pipeline overview
+
+```mermaid
+flowchart LR
+    CSV["Survey CSV<br/>114 columns"] --> CLEAN["src/build_database.py<br/>clean + normalise"]
+    CLEAN --> DB[("SQLite<br/>40 tables")]
+    DB --> REP["src/generate_report.py<br/>charts + report"]
+    DB --> Q["src/query.py<br/>read-only SQL"]
+    SAMPLE["data/sample/<br/>500 rows"] -.-> CLEAN
+    FETCH["scripts/fetch_data.sh"] -.-> CSV
+```
+
+## Contents
+
+1. [Source & provenance](#1-source--provenance)
+2. [Cleaning rules](#2-cleaning-rules)
+3. [Normalisation & de-duplication](#3-normalisation--de-duplication)
+4. [Relational schema (40 tables)](#4-relational-schema-40-tables)
+5. [Reproducibility](#5-reproducibility)
+6. [Known deviations & judgement calls](#6-known-deviations--judgement-calls)
 
 ## 1. Source & provenance
 
@@ -15,7 +36,7 @@ run (`18,845` respondents).
   contains the complete response set (65k+ responses), so re-running the pipeline directly
   on the official file yields a larger sample and different absolute counts. The committed
   `data/sample/so_survey_sample.csv` (500 rows) exists only to make `make demo` run offline.
-- **No invented data:** every figure in `RESULTS.md` / `output/analysis_report.md` is
+- **No invented data:** every figure in `results.md` / `reports/analysis_report.md` is
   produced by running the pipeline on this input.
 
 ## 2. Cleaning rules
@@ -56,27 +77,27 @@ run (`18,845` respondents).
 - Indexes are created on `respondent_id` (all child tables) and on `tech_name` (all
   technology tables), plus indexes on common `respondents` columns.
 
-See [DATA_DICTIONARY.md](DATA_DICTIONARY.md) for column-level detail.
+See [data-dictionary.md](data-dictionary.md) for column-level detail.
 
 ## 5. Reproducibility
 
 ```bash
 make setup        # pinned environment
-make demo         # offline: sample -> demo.sqlite -> output_demo/
+make demo         # offline: sample -> build/demo.sqlite -> build/demo/
 make test         # deterministic tests
 # full run:
 make fetch-data && make build-db && make report
 ```
 
-`build_database.py` and `generate_report.py` accept explicit paths:
+`src/build_database.py` and `src/generate_report.py` accept explicit paths:
 
 ```bash
-python build_database.py --input <csv> --output <db>
-python generate_report.py --db <db> --output-dir <dir>
+python src/build_database.py --input <csv> --output <db>
+python src/generate_report.py --db <db> --output-dir <dir>
 ```
 
-Both are idempotent: `build_database.py` replaces a previous output database instead of
-failing on existing tables, and `generate_report.py` produces byte-identical output when
+Both are idempotent: `src/build_database.py` replaces a previous output database instead of
+failing on existing tables, and `src/generate_report.py` produces byte-identical output when
 run twice against the same database (verified in `tests/test_report_idempotency.py`).
 
 ## 6. Known deviations & judgement calls

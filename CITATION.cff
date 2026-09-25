@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this project or its analysis, please cite it as below."
+title: "Survey Data Analysis — Stack Overflow 2024"
+type: software
+authors:
+  - name: "Malik Awais"
+license: MIT
+repository-code: "https://github.com/malikb0/IBM-data-analyst-capstone"
+abstract: >-
+  A reproducible data-analysis pipeline over the Stack Overflow 2024 Developer
+  Survey: a documented ETL step (CSV to a normalised SQLite database), a report
+  generator (charts plus a written analysis), and a deterministic test suite.
+  Includes the owner's completed IBM/Coursera course lab notebooks, which are
+  attributed and excluded from the MIT license.
+keywords:
+  - data-analysis
+  - etl
+  - sqlite
+  - stack-overflow-survey
+  - python
+references:
+  - type: dataset
+    title: "Stack Overflow Developer Survey 2024"
+    authors:
+      - name: "Stack Overflow"
+    url: "https://survey.stackoverflow.co/2024/"
+    license: ODbL

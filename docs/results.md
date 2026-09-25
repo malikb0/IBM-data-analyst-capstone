@@ -5,12 +5,23 @@ below was produced by a command run against the generated database** (`18,845`
 respondents). Reproduce any query with:
 
 ```bash
-python scripts/query.py "<SQL>"
+python src/query.py "<SQL>"
 ```
 
-Charts are generated into `output/` by `make report` (or `output_demo/` by `make demo`).
-See [METHODOLOGY.md](METHODOLOGY.md) for cleaning rules and [LIMITATIONS.md](LIMITATIONS.md)
+Charts are generated into `reports/charts/` by `make report` (or `build/demo/` by `make demo`).
+See [methodology.md](methodology.md) for cleaning rules and [limitations.md](limitations.md)
 before drawing conclusions — all relationships are descriptive and correlational.
+
+## Findings
+
+1. [JavaScript is both the most-used and most-wanted language](#finding-1--javascript-is-both-the-most-used-and-most-wanted-language)
+2. [Rust has the strongest forward-looking demand](#finding-2--rust-has-the-strongest-forward-looking-demand)
+3. [PostgreSQL leads databases on both current use and desire](#finding-3--postgresql-leads-databases-on-both-current-use-and-desire)
+4. [Remote work is associated with higher pay and higher satisfaction](#finding-4--remote-work-is-associated-with-higher-pay-and-higher-satisfaction)
+5. [AI tools are already mainstream, and sentiment is broadly favourable](#finding-5--ai-tools-are-already-mainstream-and-sentiment-is-broadly-favourable)
+6. [Global median pay is $65,858; the US tops large-country medians](#finding-6--global-median-pay-is-65858-the-us-tops-large-country-medians)
+7. [Satisfaction factors: compensation and resources score highest](#finding-7--satisfaction-factors-compensation-and-resources-score-highest)
+8. [AWS and Node.js lead their categories](#finding-8--aws-and-nodejs-lead-their-categories)
 
 ---
 
@@ -20,8 +31,8 @@ JavaScript is used by **14,943 respondents (79.3%)** and is named first among wa
 languages (**11,541, 61.2%**). TypeScript sits close to parity: **10,709 (56.8%)** currently
 use it, **10,437 (55.4%)** want to.
 
-- Chart: [`output/chart_lang_current.png`](output/chart_lang_current.png),
-  [`output/chart_lang_wanted.png`](output/chart_lang_wanted.png)
+- Chart: [`reports/charts/chart_lang_current.png`](reports/charts/chart_lang_current.png),
+  [`reports/charts/chart_lang_wanted.png`](reports/charts/chart_lang_wanted.png)
 - Query:
   ```sql
   SELECT tech_name, COUNT(*) n FROM Language_have GROUP BY 1 ORDER BY n DESC LIMIT 5;
@@ -34,7 +45,7 @@ Rust shows the largest want/have ratio of any major language: **2,284** responde
 and **5,597** want to — a **2.45×** ratio, far above JavaScript (**0.77×**) and TypeScript
 (**0.97×**). Go (**1.71×**) and Kotlin (**1.40×**) show similar, smaller gaps.
 
-- Chart: [`output/chart_rising_stars.png`](output/chart_rising_stars.png)
+- Chart: [`reports/charts/chart_rising_stars.png`](reports/charts/chart_rising_stars.png)
 - Query:
   ```sql
   SELECT
@@ -48,8 +59,8 @@ and **5,597** want to — a **2.45×** ratio, far above JavaScript (**0.77×**) 
 PostgreSQL is the most-wanted database too (**12,193, 64.7%**). MySQL's want share
 (**32.9%**) is below its current use, whereas Redis/SQLite are wanted by roughly a third.
 
-- Chart: [`output/chart_db_current.png`](output/chart_db_current.png),
-  [`output/chart_db_wanted.png`](output/chart_db_wanted.png)
+- Chart: [`reports/charts/chart_db_current.png`](reports/charts/chart_db_current.png),
+  [`reports/charts/chart_db_wanted.png`](reports/charts/chart_db_wanted.png)
 - Query:
   ```sql
   SELECT tech_name, COUNT(*) n FROM Database_have GROUP BY 1 ORDER BY n DESC LIMIT 5;
@@ -62,8 +73,8 @@ Remote respondents report mean satisfaction **7.27/10** (n=5,091) vs **6.75/10**
 in-person (n=1,867), with hybrid in between (**7.16**). The same ordering holds for pay:
 remote median **$90,712** vs in-person **$55,850**.
 
-- Chart: [`output/chart_jobsat_remote.png`](output/chart_jobsat_remote.png),
-  [`output/chart_comp_remote.png`](output/chart_comp_remote.png)
+- Chart: [`reports/charts/chart_jobsat_remote.png`](reports/charts/chart_jobsat_remote.png),
+  [`reports/charts/chart_comp_remote.png`](reports/charts/chart_comp_remote.png)
 - Query:
   ```sql
   SELECT remote_work, AVG(job_sat), COUNT(*)
@@ -79,7 +90,7 @@ soon and **3,363** do not plan to. Sentiment (where given) is favourable far mor
 not: **7,458 "favorable" + 3,962 "very favorable"** vs **734 "unfavorable" + 167 "very
 unfavorable"**.
 
-- Chart: [`output/chart_ai_sentiment.png`](output/chart_ai_sentiment.png)
+- Chart: [`reports/charts/chart_ai_sentiment.png`](reports/charts/chart_ai_sentiment.png)
 - Query:
   ```sql
   SELECT ai_select, COUNT(*) FROM respondents WHERE ai_select IS NOT NULL GROUP BY 1 ORDER BY 2 DESC;
@@ -92,8 +103,8 @@ Across the **9,550** respondents who reported compensation, the median is **$65,
 the mean **$80,912** (capped at the 99th percentile, **$378,512**). Among countries with
 30+ respondents, the highest median is the United States (**$148,000**, n=1,849).
 
-- Chart: [`output/chart_comp_dist.png`](output/chart_comp_dist.png),
-  [`output/chart_comp_country.png`](output/chart_comp_country.png)
+- Chart: [`reports/charts/chart_comp_dist.png`](reports/charts/chart_comp_dist.png),
+  [`reports/charts/chart_comp_country.png`](reports/charts/chart_comp_country.png)
 - Query:
   ```sql
   SELECT AVG(converted_comp_yearly), MAX(converted_comp_yearly)
@@ -107,10 +118,10 @@ the mean **$80,912** (capped at the 99th percentile, **$378,512**). Among countr
 
 Mean overall satisfaction is **7.15/10** (median 8). Among the nine `JobSatPoints_*`
 factors, **compensation (25.3)** and **resources (24.6)** score highest, while **coworkers
-(8.0)** scores lowest. (These are raw item scores — see METHODOLOGY.md §6 for the scale
+(8.0)** scores lowest. (These are raw item scores — see methodology.md §6 for the scale
 caveat.)
 
-- Chart: [`output/chart_jobsat_factors.png`](output/chart_jobsat_factors.png)
+- Chart: [`reports/charts/chart_jobsat_factors.png`](reports/charts/chart_jobsat_factors.png)
 - Query:
   ```sql
   SELECT aspect, ROUND(AVG(score),1) avg_score, COUNT(*)
@@ -123,7 +134,7 @@ caveat.)
 Google Cloud (**5,537**). **Node.js (9,230, 49.0%)** and **React (8,999)** lead web
 frameworks.
 
-- Chart: [`output/chart_platform_trends.png`](output/chart_platform_trends.png)
+- Chart: [`reports/charts/chart_platform_trends.png`](reports/charts/chart_platform_trends.png)
 - Query:
   ```sql
   SELECT tech_name, COUNT(*) n FROM Platform_have GROUP BY 1 ORDER BY n DESC LIMIT 5;
@@ -138,7 +149,7 @@ frameworks.
 make setup && make demo        # offline, on the committed sample
 # or the full run:
 make fetch-data && make build-db && make report
-python scripts/query.py "SELECT COUNT(*) FROM respondents"
+python src/query.py "SELECT COUNT(*) FROM respondents"
 ```
 
 ## How to read a chart

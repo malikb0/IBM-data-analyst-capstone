@@ -1,46 +1,48 @@
-jobs.json
-survey_data.csv
-12_modified_survey_data.csv
-survey-data.csv
-*.csv
-*.sqlite
-*.json
-*.db
-*.xls
-*.xlsx
-*.png
-*.pptx
-
-# --- portfolio-polish additions ---
-# local virtualenvs (never commit; OS-specific)
+# --- virtualenvs ---
 .venv/
-.venv-data-analysis/
+.venv-*/
+env/
+venv/
 
-# orchestrator-private working files (brief, recon, reports)
+# --- orchestrator/agent-private working files (never published) ---
 .orchestrator/
 
-# generated / fetched data (keep the committed sample via negation)
-data/raw/
-demo.sqlite
-output_demo/
-!data/sample/*.csv
-
-# Python + tooling cruft
+# --- Python ---
 __pycache__/
+*.py[cod]
 .pytest_cache/
-*.pyc
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
 
-# OS / Office locks
-~$*
+# --- editors / OS ---
+.vscode/
 .DS_Store
+Thumbs.db
+~$*
 
-# SQLite WAL sidecars from a running/interrupted build
-*.sqlite-wal
+# --- datasets: raw + interim are large and regenerable; only the sample is committed ---
+data/raw/*
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+
+# --- local build / scratch artifacts (databases, demo output) ---
+build/
+*.sqlite
 *.sqlite-shm
-demo.sqlite-*
+*.sqlite-wal
 
-# nbtool backup store (if used locally)
+# --- generated data tables live beside the report; only the report + charts are committed ---
+reports/*.csv
+
+# --- notebook tooling ---
+.ipynb_checkpoints/
 .nbtool/
 
-# Keep README screenshots committed (negate the blanket *.png above)
-!docs/images/*.png
+# --- large lab sample data (kept local; only public samples are committed) ---
+labs/data/jobs.json
+labs/data/12_modified_survey_data.csv
+labs/data/survey_data-for-visualization-labs.csv
+labs/data/popular-languages.xlsx
+labs/Data Analyst Capstone 2026.pptx

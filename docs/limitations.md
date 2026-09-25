@@ -3,6 +3,13 @@
 An honest account of the boundaries of this analysis. A portfolio analysis is stronger when
 it names its own limits.
 
+## Contents
+
+- [Data](#data)
+- [Method](#method)
+- [Scope](#scope)
+- [Reproducibility caveat](#reproducibility-caveat)
+
 ## Data
 
 - **Self-selected sample.** Stack Overflow survey respondents are not representative of all
@@ -44,15 +51,15 @@ it names its own limits.
 
 - **Charts are descriptive, not causal.** No significance testing is claimed. Correlations
   such as remote-work ↔ compensation may be confounded by role, seniority, and country.
-- **The 24 lab notebooks are course exercises**, not part of the analysed dataset and not
-  covered by this project's MIT license (see [NOTICE.md](NOTICE.md)).
+- **The 26 lab notebooks are course exercises**, not part of the analysed dataset and not
+  covered by this project's MIT license (see [NOTICE.md](../NOTICE.md)).
 - **AI-tool questions changed over survey years**; cross-year AI comparisons are not made
   here.
 
 ## Reproducibility caveat
 
 - `make demo` runs on the 500-row committed sample, so it will **not** reproduce the
-  headline numbers in [RESULTS.md](RESULTS.md); it verifies that the pipeline runs.
+  headline numbers in [results.md](results.md); it verifies that the pipeline runs.
 - The full run needs either the working subset or `make fetch-data` plus the official
   archive. The official CDN link has moved historically; `scripts/fetch_data.sh` tries known
   URLs and accepts an explicit `SO_SURVEY_URL` / `SO_SURVEY_LOCAL_ZIP` override.

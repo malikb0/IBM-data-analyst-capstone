@@ -13,20 +13,25 @@
 
 PYTHON   ?= python3.10
 VENV     ?= .venv
-BIN      := $(VENV)/bin
+# Support both POSIX (bin/) and Windows (Scripts/) virtualenv layouts.
+ifeq ($(wildcard $(VENV)/bin/python),)
+  BIN := $(VENV)/Scripts
+else
+  BIN := $(VENV)/bin
+endif
 PIP      := $(BIN)/pip
 PY       := $(BIN)/python
 
 # Full-pipeline inputs/outputs (override on the command line, e.g. CSV=...).
 RAW      ?= data/raw
-CSV      ?= survey_data_updated.csv
-DB       ?= survey_cleaned.sqlite
-OUTPUT   ?= output
+CSV      ?= data/interim/survey_data_updated.csv
+DB       ?= build/survey_cleaned.sqlite
+OUTPUT   ?= reports
 
 # Offline demo artifacts.
 SAMPLE   ?= data/sample/so_survey_sample.csv
-DEMO_DB  ?= demo.sqlite
-DEMO_OUT ?= output_demo
+DEMO_DB  ?= build/demo.sqlite
+DEMO_OUT ?= build/demo
 
 .PHONY: help setup fetch-data build-db report test demo verify query clean
 
@@ -42,26 +47,26 @@ fetch-data: ## download the official survey into data/raw (network)
 	bash scripts/fetch_data.sh $(RAW)
 
 build-db: ## build $(DB) from $(CSV)
-	$(PY) build_database.py --input $(CSV) --output $(DB)
+	$(PY) src/build_database.py --input $(CSV) --output $(DB)
 
 report: ## generate charts + report from $(DB)
-	$(PY) generate_report.py --db $(DB) --output-dir $(OUTPUT)
+	$(PY) src/generate_report.py --db $(DB) --output-dir $(OUTPUT)
 
 test: ## fast deterministic tests (no big data)
-	$(PY) -m pytest tests/ -q
+	$(PY) -m pytest tests/
 
 demo: ## end-to-end on the committed sample (no download)
 	@test -f $(SAMPLE) || { echo "missing committed sample: $(SAMPLE)"; exit 1; }
-	$(PY) build_database.py --input $(SAMPLE) --output $(DEMO_DB)
-	$(PY) generate_report.py --db $(DEMO_DB) --output-dir $(DEMO_OUT)
+	$(PY) src/build_database.py --input $(SAMPLE) --output $(DEMO_DB)
+	$(PY) src/generate_report.py --db $(DEMO_DB) --output-dir $(DEMO_OUT)
 	@echo "demo complete -> see $(DEMO_OUT)/"
 
 verify: ## readiness gate
 	bash .orchestrator/scripts/verify-readiness.sh
 
 query: ## run a read-only query, e.g. make query Q="SELECT COUNT(*) FROM respondents"
-	$(PY) scripts/query.py "$(Q)"
+	$(PY) src/query.py "$(Q)"
 
 clean: ## remove local generated artifacts (keeps committed files)
-	rm -rf $(DEMO_DB) $(DEMO_OUT) .pytest_cache
+	rm -rf build .pytest_cache .ruff_cache
 	find . -name '__pycache__' -type d -prune -exec rm -rf {} +

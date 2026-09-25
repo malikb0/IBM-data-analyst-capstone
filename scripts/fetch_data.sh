@@ -118,4 +118,4 @@ fi
 echo
 echo "done. raw file: $FINAL_CSV"
 echo "For the canonical 18,845-row working subset used by the published results,"
-echo "see METHODOLOGY.md §1; the official file contains the full response set."
+echo "see docs/methodology.md §1; the official file contains the full response set."

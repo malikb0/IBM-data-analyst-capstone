@@ -1,6 +1,6 @@
 # Data Dictionary
 
-Source: **Stack Overflow Developer Survey 2024**, 114 columns. `build_database.py`
+Source: **Stack Overflow Developer Survey 2024**, 114 columns. `src/build_database.py`
 normalises it into **40 SQLite tables** (one fact table, 33 technology tables, 6 junction
 tables).
 
@@ -11,9 +11,48 @@ tables).
 Regenerate the schema at any time:
 
 ```bash
-python scripts/query.py "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-python scripts/query.py "PRAGMA table_info(respondents)"
+python src/query.py "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+python src/query.py "PRAGMA table_info(respondents)"
 ```
+
+## Contents
+
+1. [Fact table — `respondents`](#1-fact-table--respondents-18845-rows-30-columns)
+2. [Technology tables (33)](#2-technology-tables--11-categories--3-variants--33-tables)
+3. [Junction / long-format tables](#3-junction--long-format-tables)
+4. [The 114 source columns, by theme](#4-the-114-source-columns-by-theme)
+
+## Schema at a glance
+
+```mermaid
+erDiagram
+    respondents ||--o{ language_have : "uses"
+    respondents ||--o{ language_want : "wants"
+    respondents ||--o{ respondent_employment : "has"
+    respondents ||--o{ respondent_devtype : "is"
+    respondents ||--o{ respondent_learn_code : "learns via"
+    respondents ||--o{ respondent_coding_activities : "does"
+    respondents ||--o{ job_satisfaction_points : "rates"
+    respondents ||--o{ knowledge_self_assessment : "self-rates"
+    respondents {
+        int respondent_id PK
+        string country
+        string age_group
+        string remote_work
+        float converted_comp_yearly
+        float job_sat
+    }
+    language_have {
+        int id PK
+        int respondent_id FK
+        string tech_name
+    }
+```
+
+> The diagram shows representative tables. The full schema adds the remaining technology
+> tables (`Database`, `Platform`, `Webframe`, `Embedded`, `MiscTech`, `ToolsTech`,
+> `NEWCollabTools`, `OfficeStackAsync`, `OfficeStackSync`, `AISearchDev`), each with
+> `_have`, `_want` and `_admired` variants.
 
 ## 1. Fact table — `respondents` (18,845 rows, 30 columns)
 

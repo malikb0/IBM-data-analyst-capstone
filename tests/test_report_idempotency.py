@@ -33,7 +33,7 @@ def test_report_is_idempotent(tmp_path):
     bd.build(SAMPLE_CSV, str(db_path), verbose=False)
 
     out_dir = tmp_path / "out"
-    script = os.path.join(REPO_ROOT, "generate_report.py")
+    script = os.path.join(REPO_ROOT, "src", "generate_report.py")
 
     def run_once():
         result = subprocess.run(
@@ -43,9 +43,9 @@ def test_report_is_idempotent(tmp_path):
             text=True,
         )
         assert result.returncode == 0, result.stderr
-        files = sorted(p for p in out_dir.iterdir() if p.is_file())
+        files = sorted(p for p in out_dir.rglob("*") if p.is_file())
         assert files, "report generator produced no output"
-        return {p.name: _sha256(p) for p in files}
+        return {str(p.relative_to(out_dir)): _sha256(p) for p in files}
 
     first = run_once()
     second = run_once()

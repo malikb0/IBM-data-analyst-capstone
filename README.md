@@ -1,131 +1,259 @@
-# Developer Survey Analysis — Stack Overflow 2024
+# Survey Data Analysis — Stack Overflow 2024
 
-> Cleaning, normalising and analysing 18,845 responses to the Stack Overflow 2024
-> Developer Survey: a reproducible data pipeline plus a written analysis of technology
-> trends, pay, job satisfaction and AI-tool adoption.
->
-> **Not affiliated with, sponsored by, or endorsed by IBM, Coursera, or Stack Overflow.**
-> This is an independent portfolio project; the survey data belongs to Stack Overflow and
-> the course labs belong to IBM/Coursera. See [NOTICE.md](NOTICE.md).
+![Python](https://img.shields.io/badge/python-3.10-blue)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
+![Reproducible](https://img.shields.io/badge/reproducible-make%20demo-brightgreen)
+![Tests](https://img.shields.io/badge/tests-32%20passing-brightgreen)
+![Data: ODbL](https://img.shields.io/badge/data-ODbL-lightgrey)
 
-This is a documentation-first data-analysis project. The ETL and reporting code are small
-and readable; the value is the **reproducible pipeline** (CSV → relational SQLite → charts
-→ report) and the **analysis** it produces.
+A reproducible, end-to-end analysis of the Stack Overflow 2024 Developer Survey —
+**18,845 responses, 114 columns, 40 normalised tables** — taken from a raw CSV to a
+documented database, a generated report, and a tested pipeline you can run in one command.
+
+Built and maintained by [@malikb0](https://github.com/malikb0).
+
+> Independent portfolio work — not affiliated with or endorsed by IBM, Coursera, or Stack
+> Overflow. See [`NOTICE.md`](NOTICE.md).
+
+## About this project
+
+This is a self-contained data-analysis project, organised so you can understand it
+end-to-end without prior context:
+
+1. **What it does** — cleans the survey, models it relationally, and produces charts and findings.
+2. **How to run it** — `make setup && make demo` (offline) or the full pipeline on the real data.
+3. **How it is documented** — every step has a document; see the [documentation map](#documentation-map).
+4. **What it proves and what it doesn't** — methodology and limitations are written down, not implied.
+
+| At a glance | |
+|---|---|
+| **Type** | Data analysis / ETL portfolio project |
+| **Stack** | Python 3.10 · pandas · NumPy · matplotlib · SQLite |
+| **Dataset** | Stack Overflow Developer Survey 2024 (ODbL) |
+| **Scale** | 18,845 respondents · 114 columns · 40 tables · 8 findings |
+| **Output** | SQLite database · charts · a generated Markdown report |
+| **Quality** | 32 deterministic tests · byte-identical report reruns · CI |
+| **License** | MIT (code/docs); dataset ODbL; course labs excluded |
+
+### Questions this project answers
+
+- Which languages and tools do developers use — and want to use next?
+- How do pay and satisfaction vary by remote work, role, country, and age?
+- How mainstream are AI tools, and how do developers feel about them?
+
+## Documentation map
+
+| Document | What it is |
+|---|---|
+| [docs/README.md](docs/README.md) | Documentation index and pipeline diagram. |
+| [docs/methodology.md](docs/methodology.md) | Cleaning rules, normalisation, schema, reproducibility. |
+| [docs/results.md](docs/results.md) | The eight headline findings, each with its SQL query. |
+| [docs/limitations.md](docs/limitations.md) | What the analysis does and does not prove. |
+| [docs/data-dictionary.md](docs/data-dictionary.md) | All 40 SQLite tables and the 114 source columns. |
+| [reports/analysis_report.md](reports/analysis_report.md) | The generated report (charts + computed figures). |
+| [docs/capstone-report.pdf](docs/capstone-report.pdf) | The original written capstone report (export). |
+| [labs/README.md](labs/README.md) | Index of the IBM/Coursera course notebooks. |
+| [data/README.md](data/README.md) | Data layout and how to fetch the full survey. |
+| [scripts/README.md](scripts/README.md) | The data-download helper. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Conventions for working on the repo. |
+| [CHANGELOG.md](CHANGELOG.md) | Notable changes. |
+| [NOTICE.md](NOTICE.md) | Attribution, provenance, and license scope. |
+| [CITATION.cff](CITATION.cff) | How to cite this project and the dataset. |
+
+## Contents
+
+- [About this project](#about-this-project)
+- [Documentation map](#documentation-map)
+- [Architecture](#architecture)
+- [Results at a glance](#results-at-a-glance)
+- [Screenshots](#screenshots)
+- [Repository structure](#repository-structure)
+- [Quickstart](#quickstart)
+- [Make targets](#make-targets)
+- [Data](#data)
+- [Reproducibility](#reproducibility)
+- [Limitations](#limitations)
+- [Contributing](#contributing)
+- [Attribution & license](#attribution--license)
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A["Stack Overflow 2024<br/>survey CSV"] --> B["src/build_database.py<br/>clean + normalise"]
+    B --> C[("SQLite database<br/>40 tables")]
+    C --> D["src/generate_report.py<br/>charts + report"]
+    D --> E["reports/<br/>analysis_report.md + charts/"]
+    C -. read-only .-> F["src/query.py"]
+    subgraph data
+        G["data/sample/<br/>500-row subset"] -.-> B
+        H["scripts/fetch_data.sh<br/>download + checksum"] -.-> A
+    end
+```
+
+The database is fully relational — one row per respondent, 33 per-category technology
+tables (11 categories × have/want/admired), and 6 junction tables:
+
+```mermaid
+erDiagram
+    respondents ||--o{ language_have : "uses"
+    respondents ||--o{ language_want : "wants"
+    respondents ||--o{ respondent_employment : "has"
+    respondents ||--o{ respondent_devtype : "is"
+    respondents ||--o{ job_satisfaction_points : "rates"
+    respondents ||--o{ knowledge_self_assessment : "self-rates"
+    respondents {
+        int respondent_id PK
+        string country
+        string age_group
+        string remote_work
+        float converted_comp_yearly
+        float job_sat
+    }
+    language_have {
+        int id PK
+        int respondent_id FK
+        string tech_name
+    }
+```
+
+Full schema: [`docs/data-dictionary.md`](docs/data-dictionary.md).
 
 ## Results at a glance
 
-Exact figures from the current run (`18,845` respondents; see [RESULTS.md](RESULTS.md) and
-[`output/analysis_report.md`](output/analysis_report.md)):
+All figures are computed from the canonical run (18,845 respondents); full sourcing, queries
+and caveats in [`docs/results.md`](docs/results.md).
 
-- **JavaScript leads usage** at **79%** of respondents and is also the most-wanted language
-  (**61%**). TypeScript sits at **57%** current vs **55%** desired.
-- **Rust has the strongest want/have ratio** of any major language (**~2.45×**: 2,284 use it,
-  5,597 want to).
-- **PostgreSQL is the most-used and most-wanted database** (**61%** use, **65%** want),
-  ahead of MySQL (**45%**) and SQLite (**37%**).
-- **Remote work tracks higher pay and satisfaction**: remote median pay **$90,712** vs
-  in-person **$55,850**; mean satisfaction **7.27** vs **6.75** (out of 10).
-- **Global median pay is $65,858**; the United States has the highest national median among
-  countries with 30+ respondents (**$148,000**).
-- **AI sentiment is broadly favourable**: 3,962 "very favorable" + 7,458 "favorable" vs
-  734 "unfavorable" + 167 "very unfavorable".
+| Finding | Figure |
+|---|---|
+| Most-used language | **JavaScript — 79.3%** (also most-wanted, 61.2%) |
+| Strongest want/have signal | **Rust — 2.45×** (2,284 use, 5,597 want) |
+| Leading database | **PostgreSQL — 61.1% use, 64.7% want** |
+| Remote vs in-person pay | **$90,712 vs $55,850** median |
+| Global vs US median pay | **$65,858** global; **$148,000** US (30+ respondents) |
+| AI sentiment | **11,420 favourable** vs **901 unfavourable** |
 
-## What this project does
+## Screenshots
 
-1. **ETL** — `build_database.py` reads the survey CSV, applies documented cleaning rules
-   (sentinel mapping for years, a 99th-percentile compensation cap, Likert mapping), and
-   normalises `";"`-delimited multi-value columns into a relational SQLite schema with
-   de-duplication.
-2. **Analysis** — `generate_report.py` queries that database and emits 40+ charts plus a
-   generated Markdown report with computed figures.
-3. **Reproducibility** — a `Makefile`, a scripted data fetch, a tiny committed sample, and
-   deterministic tests let anyone reproduce the pipeline offline (`make demo`) or in full.
+| Top languages used | Top databases used | Median pay by country |
+|---|---|---|
+| ![Languages used](docs/images/chart_lang_current.png) | ![Databases used](docs/images/chart_db_current.png) | ![Median compensation by country](docs/images/chart_comp_country.png) |
+
+The full set of generated charts lives in [`reports/charts/`](reports/charts).
 
 ## Repository structure
 
+```text
+.
+├── src/                     # pipeline source
+│   ├── build_database.py    #   CSV -> normalised SQLite
+│   ├── generate_report.py   #   SQLite -> charts + Markdown report
+│   └── query.py             #   read-only SQL helper
+├── scripts/
+│   └── fetch_data.sh        # download the official survey + checksum
+├── data/
+│   ├── sample/              # committed 500-row subset (offline demo)
+│   ├── raw/                 # git-ignored: official download
+│   └── interim/             # git-ignored: working CSVs
+├── docs/                    # methodology, results, limitations, data dictionary
+│   ├── README.md            #   documentation index
+│   ├── methodology.md
+│   ├── results.md
+│   ├── limitations.md
+│   ├── data-dictionary.md
+│   ├── capstone-report.pdf
+│   └── images/
+├── labs/                    # IBM/Coursera coursework (not MIT) - see labs/README.md
+│   ├── notebooks/
+│   └── data/
+├── reports/                 # committed rendered report + charts/
+├── tests/                   # deterministic tests
+├── build/                   # git-ignored local artifacts (databases, demo output)
+├── Makefile
+├── requirements.txt
+├── pyproject.toml
+├── README.md  LICENSE  NOTICE.md  CITATION.cff
+└── CONTRIBUTING.md  CHANGELOG.md
 ```
-build_database.py      # CSV -> normalised SQLite (40 tables)
-generate_report.py     # SQLite -> charts + generated analysis report
-analysis_report.md     # see output/analysis_report.md (generated)
-data/sample/           # tiny committed subset so `make demo` runs offline
-scripts/fetch_data.sh  # download the official survey + integrity check
-scripts/query.py       # read-only query helper for the SQLite database
-tests/                 # deterministic tests (cleaning, ETL, report idempotency)
-docs/images/           # README screenshots
-output/                # generated charts + analysis_report.md
-0..24 *.ipynb          # IBM/Coursera course labs (attributed; see NOTICE.md)
-METHODOLOGY.md         # cleaning + normalisation rules
-DATA_DICTIONARY.md     # the 40 tables and the 114 source columns
-LIMITATIONS.md         # what this analysis does and does not prove
-RESULTS.md             # headline findings with exact numbers and queries
-NOTICE.md / LICENSE    # attribution and reuse terms
+
+## Quickstart
+
+Requires **Python 3.10** and `make`.
+
+```bash
+git clone https://github.com/malikb0/IBM-data-analyst-capstone.git
+cd IBM-data-analyst-capstone
+make setup     # create .venv + install pinned deps
+make demo      # end-to-end on the committed sample: offline, deterministic
 ```
+
+`make demo` builds a SQLite database from the 500-row sample and writes charts + a report to
+`build/demo/`. To run the full analysis on the official survey:
+
+```bash
+make fetch-data   # download the official survey into data/raw/ (+ verify)
+make build-db     # CSV  -> build/survey_cleaned.sqlite
+make report       # DB   -> reports/ charts + report
+```
+
+## Make targets
+
+| Target | Purpose |
+|---|---|
+| `make setup` | Create the virtualenv and install pinned dependencies. |
+| `make demo` | Offline end-to-end run on the committed sample → `build/demo/`. |
+| `make test` | Fast deterministic unit/integration tests. |
+| `make fetch-data` | Download the official survey archive into `data/raw/`. |
+| `make build-db` | Build `build/survey_cleaned.sqlite` from the full CSV. |
+| `make report` | Generate charts and the report into `reports/`. |
+| `make query Q="SELECT ..."` | Run a read-only query against the database. |
+| `make clean` | Remove local generated artifacts. |
 
 ## Data
 
 - **Source:** Stack Overflow Developer Survey 2024 (public; ODbL). Attribution:
   "Stack Overflow Developer Survey 2024".
-- **The full survey file is not committed** (it is large). `make fetch-data` downloads the
-  official archive into `data/raw/` and records a SHA-256 for the download.
-- **A small subset is committed** (`data/sample/so_survey_sample.csv`, 500 rows) so that
-  `make demo` works with **no download and no network**.
-- The published analysis uses an **18,845-row working subset** (`survey_data_updated.csv`).
-  The official public file contains the full response set (65k+ responses); running the
-  pipeline on it produces a larger sample and different absolute counts. This is recorded
-  as a limitation — see [METHODOLOGY.md](METHODOLOGY.md) §1 and [LIMITATIONS.md](LIMITATIONS.md).
+- **Not committed in full.** `make fetch-data` downloads the official archive into
+  `data/raw/` and records a SHA-256.
+- **A 500-row subset is committed** (`data/sample/so_survey_sample.csv`) so `make demo`
+  runs with **no download and no network**.
+- The published analysis uses an **18,845-row working subset**; running on the official
+  file (65k+ responses) yields different absolute counts. Recorded in
+  [`docs/methodology.md`](docs/methodology.md) §1 and [`docs/limitations.md`](docs/limitations.md).
 
-## Environment setup (bare machine)
+Details and overrides: [`data/README.md`](data/README.md), [`scripts/README.md`](scripts/README.md).
 
-Requires **Python 3.10.11** and `make`.
+## Reproducibility
 
-```bash
-git clone https://github.com/malikb0/IBM-data-analyst-capstone.git
-cd IBM-data-analyst-capstone
-make setup        # creates .venv and installs the pinned dependencies
-```
-
-## Quickstart
-
-```bash
-make demo         # end-to-end on the committed sample (offline, deterministic)
-make test         # fast deterministic unit tests
-make verify       # run the readiness checks
-
-# Full pipeline (needs the data):
-make fetch-data   # download the official survey into data/raw/
-make build-db     # CSV -> survey_cleaned.sqlite
-make report       # SQLite -> output/ charts + report
-```
-
-`make` targets are idempotent: re-running them is safe. Use `make help` to list them.
-
-## Results
-
-- Written findings with exact numbers and the queries behind them: **[RESULTS.md](RESULTS.md)**.
-- Full generated report (charts + figures): **[output/analysis_report.md](output/analysis_report.md)**.
-- Charts are regenerated into `output/` by `make report` (or `output_demo/` by `make demo`).
-
-![Top 10 programming languages currently used](docs/images/chart_lang_current.png)
-
-![Top 10 databases currently used](docs/images/chart_db_current.png)
-
-![Median compensation by country, top 10](docs/images/chart_comp_country.png)
+- `make test` runs the deterministic suite (cleaning helpers, ETL integration, and report
+  idempotency — the report is byte-identical across runs); **32 tests pass**.
+- `make demo` proves the pipeline end-to-end offline from the committed sample.
+- Every number in the report is computed at run time; the narrative claims are generated,
+  not hardcoded.
+- CI runs the test suite on every push — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ## Limitations
 
 Self-selected respondents, self-reported figures, a single survey year, nominal USD
-compensation, and mapping/cleaning choices all bound what these charts can claim. Read
-[LIMITATIONS.md](LIMITATIONS.md) before drawing conclusions. Charts are descriptive, not
-causal.
+compensation, and mapping/cleaning choices all bound what these charts can claim. Charts
+are descriptive, not causal. Read [`docs/limitations.md`](docs/limitations.md) before
+drawing conclusions.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for layout, conventions, and the rule that the
+`labs/` course notebooks are kept as-is.
 
 ## Attribution & license
 
-- **Original work** (pipeline, report, docs, tests, scripts) is **MIT** — see [LICENSE](LICENSE).
-- **Course work**: the `*.ipynb` lab notebooks were completed for the IBM Data Analyst
-  Professional Certificate on Coursera and remain IBM/Coursera material; they are included
-  as credited coursework and are **not** covered by the MIT license.
-- **Dataset**: Stack Overflow Developer Survey 2024, under its own (ODbL) terms.
-- Full details, including third-party assets and a security note: **[NOTICE.md](NOTICE.md)**.
+- **Original work** (pipeline, report, docs, tests, scripts) is **MIT** — see [`LICENSE`](LICENSE).
+- **Course work:** the `labs/notebooks/*.ipynb` notebooks were completed for the IBM Data
+  Analyst Professional Certificate on Coursera and remain IBM/Coursera material; they are
+  included as credited coursework and are **not** covered by the MIT license.
+- **Dataset:** Stack Overflow Developer Survey 2024, under its own (ODbL) terms.
+- Full details, including third-party assets and a security note: [`NOTICE.md`](NOTICE.md).
+
+To cite this project, see [`CITATION.cff`](CITATION.cff).
 
 _This project is independent coursework and is not affiliated with or endorsed by IBM,
 Coursera, or Stack Overflow._

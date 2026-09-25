@@ -1,7 +1,7 @@
 """Build a normalised SQLite database from the Stack Overflow 2024 survey CSV.
 
 Usage:
-    python build_database.py [--input CSV] [--output DB]
+    python src/build_database.py [--input CSV] [--output DB]
 
 Defaults preserve the original pipeline paths:
     --input  survey_data_updated.csv
